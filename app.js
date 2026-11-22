@@ -13,7 +13,7 @@
   const HUB_BASE = location.port === String(HUB_PORT) ? '' : `http://127.0.0.1:${HUB_PORT}`;
   const IS_LOCAL_HUB = location.port === String(HUB_PORT);
   const APP_VERSION = (document.querySelector('meta[name="app-version"]') || {}).content || '';
-  const RAW_VERSION_URL = 'https://raw.githubusercontent.com/anchirong9-arch/studio-launcher/main/version.json';
+  const VERSION_URL = 'https://anchirong9-arch.github.io/studio-launcher/version.json';
 
   const $  = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -291,7 +291,7 @@
     }
 
     let remote = null;
-    try { remote = await getJSON(`${RAW_VERSION_URL}?t=${Date.now()}`, 4000); } catch (err) { remote = null; }
+    try { remote = await getJSON(`${VERSION_URL}?t=${Date.now()}`, 4000); } catch (err) { remote = null; }
     paintVersion({ latest: remote && remote.version ? remote.version : '' });
     return null;
   }

@@ -3,7 +3,7 @@
   "released": "2026-11-23",
   "name": "백수톡 스튜디오",
   "zip": "https://github.com/anchirong9-arch/studio-launcher/releases/latest/download/studio-launcher.zip",
-  "version_url": "https://raw.githubusercontent.com/anchirong9-arch/studio-launcher/main/version.json",
+  "version_url": "https://anchirong9-arch.github.io/studio-launcher/version.json",
   "notes": [
     "허브에 크리에이터 툴킷 7종 미니 앱 아이콘 추가",
     "실행할 때 GitHub에서 새 버전을 확인해 자동으로 업데이트",

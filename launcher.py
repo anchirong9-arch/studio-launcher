@@ -68,7 +68,8 @@ START_WAIT = 25.0
 # ── 앱 정보 · 업데이트 ──
 APP_NAME = "백수톡 스튜디오"
 REPO = "anchirong9-arch/studio-launcher"
-DEFAULT_VERSION_URL = "https://raw.githubusercontent.com/%s/main/version.json" % REPO
+DEFAULT_VERSION_URL = "https://anchirong9-arch.github.io/studio-launcher/version.json"
+RAW_VERSION_URL = "https://raw.githubusercontent.com/%s/main/version.json" % REPO
 DEFAULT_ZIP_URL = "https://github.com/%s/releases/latest/download/studio-launcher.zip" % REPO
 UPDATE_TIMEOUT = 3.0        # 버전 확인 — 느리면 그냥 넘어갑니다
 DOWNLOAD_TIMEOUT = 30.0     # ZIP 내려받기
@@ -312,27 +313,40 @@ def _parse_version(text) -> tuple:
     return tuple(nums)
 
 
+def _version_urls() -> list[str]:
+    """버전 확인 주소 — version.json 의 version_url → 페이지 → raw 순서."""
+    urls: list[str] = []
+    try:
+        local = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        local = {}
+    for candidate in (local.get("version_url"), DEFAULT_VERSION_URL, RAW_VERSION_URL):
+        if candidate and str(candidate) not in urls:
+            urls.append(str(candidate))
+    return urls
+
+
 def fetch_remote_version(timeout: float = UPDATE_TIMEOUT) -> dict | None:
     """GitHub 의 version.json 을 짧게 확인합니다. 실패(오프라인·타임아웃)하면 None."""
-    url = DEFAULT_VERSION_URL
-    try:
-        if VERSION_FILE.is_file():
-            local = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
-            url = str(local.get("version_url") or url)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        req = urllib.request.Request(url, headers={
-            "Cache-Control": "no-cache",
-            "User-Agent": "%s/%s" % (USER_AGENT, SERVER_VERSION),
-        })
-        with urllib.request.urlopen(req, timeout=timeout) as res:
-            data = json.loads(res.read().decode("utf-8", "replace"))
-        if isinstance(data, dict) and data.get("version"):
-            return data
-        return None
-    except Exception:  # noqa: BLE001
-        return None
+    deadline = time.time() + max(1.0, timeout)
+    for url in _version_urls():
+        remaining = deadline - time.time()
+        if remaining <= 0.3:
+            break
+        sep = "&" if "?" in url else "?"
+        req_url = "%s%st=%d" % (url, sep, int(time.time() * 1000))
+        try:
+            req = urllib.request.Request(req_url, headers={
+                "Cache-Control": "no-cache",
+                "User-Agent": "%s/%s" % (USER_AGENT, SERVER_VERSION),
+            })
+            with urllib.request.urlopen(req, timeout=remaining) as res:
+                data = json.loads(res.read().decode("utf-8", "replace"))
+            if isinstance(data, dict) and data.get("version"):
+                return data
+        except Exception:  # noqa: BLE001
+            continue
+    return None
 
 
 def update_status() -> dict:
