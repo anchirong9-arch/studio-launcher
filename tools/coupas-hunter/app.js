@@ -30,6 +30,36 @@
   const won = (n) => (n == null ? "-" : `${Number(n).toLocaleString("ko-KR")}원`);
   const esc = (s) => String(s == null ? "" : s);
 
+  /* 상품 사진은 로컬 서버(/api/image)가 대신 받아 옵니다.
+   * 브라우저가 쿠팡 이미지 서버(ads-partners.coupang.com)를 직접 부르면 광고 차단 프로그램·
+   * DNS 필터·핫링크 차단·리퍼러 정책에 막혀 사진이 빈 채로 나오는 경우가 있어,
+   * 같은 주소(127.0.0.1)에서 받아 오게 바꿨습니다. 실패하면 원래 주소로 한 번 더 시도합니다. */
+  function imageSrc(url) {
+    if (!url) return "";
+    if (!/^https?:\/\//i.test(url)) return url;
+    return `${API_BASE}/api/image?url=${encodeURIComponent(url)}`;
+  }
+
+  function attachImage(img, directUrl, altText) {
+    img.alt = altText || "";
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    img.dataset.stage = "proxy";
+    img.addEventListener("error", () => {
+      if (img.dataset.stage === "proxy") {
+        img.dataset.stage = "direct";
+        img.src = directUrl;
+        return;
+      }
+      const fallback = document.createElement("div");
+      fallback.className = "thumb-fallback";
+      fallback.textContent = "사진 없음";
+      img.replaceWith(fallback);
+    });
+    img.src = imageSrc(directUrl);
+    return img;
+  }
+
   function toast(msg) {
     const el = $("toast");
     el.textContent = msg;
@@ -245,10 +275,8 @@
 
     if (item.image) {
       const img = document.createElement("img");
-      img.src = item.image;
-      img.alt = item.name;
       img.loading = "lazy";
-      img.referrerPolicy = "no-referrer";
+      attachImage(img, item.image, item.name);
       thumb.appendChild(img);
     }
 
@@ -345,8 +373,7 @@
     box.innerHTML = "";
     if (item.image) {
       const img = document.createElement("img");
-      img.src = item.image;
-      img.alt = "";
+      attachImage(img, item.image, "");
       box.appendChild(img);
     }
     const meta = document.createElement("div");

@@ -39,8 +39,20 @@
 | `POST /config` | `{"access_key":"…","secret_key":"…"}` → 이 PC에 저장 |
 | `POST /config/clear` | 이 PC의 키 삭제 |
 | `GET /api/search?q=무선마우스&max_price=10000&rocket=1&sort=value` | 상품 검색 (정렬 `value`, `price`, `discount`, `rank`) |
+| `GET /api/image?url=<상품 이미지 주소>` | 상품 사진을 서버가 대신 받아 전달 (쿠팡 도메인만 허용) |
 | `POST /api/links` | `{"product_id":"9037114012"}` → 4채널 단축 링크 |
 | `GET /download/zip` | 이 프로그램 ZIP (키 파일 제외) |
+
+## 사진이 안 나올 때 (v1.0.1에서 고침)
+
+예전에는 브라우저가 쿠팡 이미지 서버(`ads-partners.coupang.com`)를 직접 불렀습니다.
+이 주소는 광고 차단 프로그램(유블록·애드가드 등)·DNS 필터·핫링크 차단에 걸리기 쉬워
+상품 카드가 빈 채로 나오는 일이 있었습니다.
+
+지금은 화면이 `127.0.0.1:8767/api/image?url=…` 로 사진을 요청하고, **이 PC의 서버가 대신 받아** 전달합니다.
+- 허용 도메인은 `*.coupang.com` · `*.coupangcdn.com` 뿐입니다 (다른 주소는 400으로 거절).
+- `http://` 주소는 `https://` 로 바꿔 받고, 8MB까지만, 200장까지 메모리에 잠시 담아 둡니다.
+- 중계가 실패하면 화면이 원래 쿠팡 주소로 한 번 더 시도하고, 그것도 실패하면 `사진 없음` 표시를 띄웁니다.
 
 ## 보안
 

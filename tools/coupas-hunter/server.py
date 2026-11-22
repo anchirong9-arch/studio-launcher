@@ -16,6 +16,9 @@ Python 표준 라이브러리만 사용합니다. (추가 pip 설치 없음)
   POST /config/clear                로컬 키 삭제
   GET  /api/search?q=..&max_price=..&rocket=1&sort=value|price|discount
                                     쿠팡 상품 검색 (가성비 점수·가격·할인율 정렬)
+  GET  /api/image?url=<상품 이미지 주소>  상품 사진을 이 서버가 대신 받아 전달 (같은 출처)
+                                    → 브라우저가 쿠팡 CDN을 직접 부르지 않아 광고 차단·핫링크·
+                                      리퍼러 정책에 막히지 않습니다. 쿠팡 도메인만 허용.
   POST /api/links                   {"product_id":".."} → 4채널(쓰레드·유튜브·틱톡·shop-links) 단축 링크
   GET  /download/zip                이 폴더의 실행용 ZIP (키 파일 제외)
   GET  /                            웹 UI
@@ -44,7 +47,7 @@ from pathlib import Path
 
 APP_NAME = "쿠파스 가성비 상품 헌터"
 APP_ID = "coupas-hunter"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 DEFAULT_PORT = 8767
 HOST = "127.0.0.1"
 
@@ -79,9 +82,29 @@ CACHE_TTL = 600  # 검색 결과 메모리 캐시(초) — 프리셋을 눌러�
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _cache_lock = threading.Lock()
 
+# 상품 사진 중계(/api/image) — 쿠팡 이미지 도메인만 허용하고 메모리에 잠깐 담아 둡니다.
+IMAGE_ALLOWED_HOSTS = ("coupang.com", "coupangcdn.com")
+IMAGE_MAX_BYTES = 8 * 1024 * 1024  # 8MB
+IMAGE_TTL = 6 * 3600  # 6시간
+IMAGE_CACHE_MAX = 200  # 최대 200장
+IMAGE_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+)
+_image_cache: dict[str, tuple[float, bytes, str]] = {}
+_image_lock = threading.Lock()
+
 
 class ApiError(RuntimeError):
     pass
+
+
+class ImageError(RuntimeError):
+    """이미지 중계 실패 — 라우터가 502로 돌려줍니다."""
+
+
+class BadImageUrl(ImageError):
+    """주소 자체가 규칙에 맞지 않음 — 400으로 돌려줍니다."""
 
 
 # --------------------------------------------------------------------- 키 파일
@@ -226,6 +249,75 @@ def coupang_request(
     if str(data.get("rCode", "0")) not in ("0", "None"):
         raise ApiError(f"쿠팡 API 오류 rCode={data.get('rCode')} {data.get('rMessage') or ''}".strip())
     return data
+
+
+# ------------------------------------------------------- 상품 사진 중계
+def _clean_image_url(raw: str) -> str:
+    """쿠팡 이미지 주소만 통과시킵니다 (https + 쿠팡 도메인)."""
+    url = (raw or "").strip()
+    if not url:
+        raise BadImageUrl("이미지 주소가 비어 있습니다.")
+    url = urllib.parse.unquote(url)
+    if url.startswith("//"):
+        url = "https:" + url
+    elif url.lower().startswith("http://"):
+        url = "https://" + url[7:]
+    try:
+        parts = urllib.parse.urlparse(url)
+    except ValueError as exc:
+        raise BadImageUrl("이미지 주소를 해석할 수 없습니다.") from exc
+    if parts.scheme != "https":
+        raise BadImageUrl("https 이미지 주소만 중계합니다.")
+    host = (parts.hostname or "").lower()
+    if not any(host == d or host.endswith("." + d) for d in IMAGE_ALLOWED_HOSTS):
+        raise BadImageUrl("쿠팡 이미지 주소만 중계합니다.")
+    return url
+
+
+def fetch_image(raw_url: str) -> tuple[bytes, str, bool]:
+    """(본문, content-type, 캐시여부). 쿠팡 CDN이 주는 302도 따라갑니다."""
+    url = _clean_image_url(raw_url)
+    now = time.time()
+    with _image_lock:
+        hit = _image_cache.get(url)
+        if hit and now - hit[0] < IMAGE_TTL:
+            return hit[1], hit[2], True
+
+    headers = {
+        "User-Agent": IMAGE_UA,
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Referer": "https://www.coupang.com/",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            final_url = resp.geturl() or url
+            try:
+                _clean_image_url(final_url)  # 리다이렉트도 쿠팡 도메인 안에서만
+            except ImageError as exc:
+                raise ImageError("허용되지 않은 곳으로 넘어가는 이미지 주소입니다.") from exc
+            ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if not ctype.startswith("image/"):
+                raise ImageError("이미지 응답이 아닙니다.")
+            body = resp.read(IMAGE_MAX_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        raise ImageError(f"쿠팡 이미지 서버 오류 HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise ImageError(f"쿠팡 이미지 서버에 연결하지 못했습니다: {exc.reason}") from exc
+    except TimeoutError as exc:
+        raise ImageError("쿠팡 이미지 응답이 너무 늦습니다.") from exc
+
+    if not body:
+        raise ImageError("빈 이미지 응답입니다.")
+    if len(body) > IMAGE_MAX_BYTES:
+        raise ImageError("이미지가 너무 큽니다.")
+
+    with _image_lock:
+        if len(_image_cache) >= IMAGE_CACHE_MAX:
+            oldest = min(_image_cache.items(), key=lambda kv: kv[1][0])[0]
+            _image_cache.pop(oldest, None)
+        _image_cache[url] = (now, body, ctype)
+    return body, ctype, False
 
 
 def raw_search(keyword: str, limit: int = 10) -> list[dict]:
@@ -435,12 +527,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Max-Age", "86400")
 
     def _send(self, status: int, body: bytes, content_type: str, extra: dict | None = None) -> None:
+        extra = dict(extra or {})
+        cache = extra.pop("Cache-Control", "no-store")
         self.send_response(status)
         self._cors()
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        for key, value in (extra or {}).items():
+        self.send_header("Cache-Control", cache)
+        for key, value in extra.items():
             self.send_header(key, value)
         self.end_headers()
         if self.command != "HEAD":
@@ -483,7 +577,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args) -> None:
         stamp = datetime.now().strftime("%H:%M:%S")
-        sys.stdout.write(f"[{stamp}] {fmt % args}\n")
+        text = fmt % args
+        marker = "/api/image?url="
+        if marker in text:  # 이미지 주소가 길어서 로그는 줄여 씁니다
+            head, _, tail = text.partition(marker)
+            _, _, rest = tail.partition(" ")
+            text = f"{head}{marker}... {rest}"
+        sys.stdout.write(f"[{stamp}] {text}\n")
         sys.stdout.flush()
 
     # ---- 라우팅 ----
@@ -532,6 +632,24 @@ class Handler(BaseHTTPRequestHandler):
                     keyword, limit, max_price, min_price, rocket, free_shipping, sort
                 )
                 return self._json(200, result)
+
+            if path == "/api/image":
+                # 브라우저 대신 서버가 상품 사진을 받아 같은 주소(127.0.0.1)로 전달합니다.
+                image_url = (params.get("url") or [""])[0]
+                try:
+                    body, ctype, cached = fetch_image(image_url)
+                except BadImageUrl as exc:
+                    self.log_message("이미지 중계 거부: %s", exc)
+                    return self._error(400, str(exc))
+                except ImageError as exc:
+                    self.log_message("이미지 중계 실패: %s", exc)
+                    return self._error(502, str(exc))
+                return self._send(
+                    200,
+                    body,
+                    ctype,
+                    extra={"Cache-Control": "public, max-age=3600", "X-Image-Cache": "hit" if cached else "miss"},
+                )
 
             if path == "/download/zip":
                 return self._send_zip()

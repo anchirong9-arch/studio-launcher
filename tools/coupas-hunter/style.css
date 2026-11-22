@@ -238,6 +238,11 @@ code {
   display: block;
 }
 .thumb img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.thumb .thumb-fallback {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  background: #11151d; color: #6f7a8c; font-size: 12px; letter-spacing: -0.2px;
+}
 
 .badges { position: absolute; top: 8px; left: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
 .badge {
@@ -360,6 +365,11 @@ code {
   margin-bottom: 12px;
 }
 .sheet-product img { width: 54px; height: 54px; border-radius: 8px; object-fit: contain; background: #fff; flex: none; }
+.sheet-product .thumb-fallback {
+  width: 54px; height: 54px; border-radius: 8px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: #11151d; color: #6f7a8c; font-size: 10px;
+}
 .sheet-product .meta { min-width: 0; }
 .sheet-product .nm { font-size: 12.5px; line-height: 1.4; margin: 0 0 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .sheet-product .pr { font-size: 12px; color: var(--muted); }
