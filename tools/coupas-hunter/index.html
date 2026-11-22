@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>쿠파스 가성비 상품 헌터</title>
+<meta name="description" content="쿠팡 파트너스 상품을 가성비로 골라 4채널 단축 링크까지 한 번에 뽑는 로컬 도구">
+<meta name="theme-color" content="#0f1117">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">🛒</span>
+    <div class="brand-text">
+      <h1>쿠파스 가성비 헌터</h1>
+      <p>1만 원 이하 · 로켓배송 · 4채널 링크</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button id="statusPill" class="status-pill" type="button" title="로컬 서버 상태">
+      <span class="dot"></span><span class="status-text">확인 중…</span>
+    </button>
+    <button id="keyBtn" class="ghost-btn" type="button">🔑 키 설정</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 로컬 서버 연결 배너 -->
+  <section id="connBanner" class="banner hidden" aria-live="polite">
+    <div class="banner-body">
+      <strong id="connTitle">로컬 서버에 연결되지 않았습니다</strong>
+      <p id="connDesc">이 PC에서 <code>실행하기.bat</code>을 더블클릭해 서버를 켜면 검색과 링크 뽑기가 열립니다.</p>
+      <div class="banner-actions">
+        <a id="zipBtn" class="ghost-btn" href="https://github.com/anchirong9-arch/coupas-hunter/archive/refs/heads/main.zip">⬇ ZIP 다운로드</a>
+        <button id="retryBtn" class="ghost-btn" type="button">↻ 다시 연결</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 검색 -->
+  <section class="search-card">
+    <form id="searchForm" class="search-row" autocomplete="off">
+      <input id="q" name="q" type="search" placeholder="예: 미니 가습기, 1만원 이하 주방템" enterkeyhint="search" aria-label="검색어">
+      <button id="searchBtn" class="primary-btn" type="submit">검색</button>
+    </form>
+
+    <div class="chip-row" role="group" aria-label="빠른 프리셋">
+      <button class="chip" type="button" data-preset="under10k">💸 1만 원 이하</button>
+      <button class="chip" type="button" data-preset="rocket">🚀 로켓배송만</button>
+      <button class="chip" type="button" data-preset="cheap">📉 가격 낮은순</button>
+      <button class="chip" type="button" data-preset="discount">🔥 할인율 순</button>
+      <button class="chip" type="button" data-preset="reset">↺ 조건 초기화</button>
+    </div>
+
+    <div class="keyword-row" aria-label="추천 검색어">
+      <span class="label">추천</span>
+      <button class="kw" type="button">미니 가습기</button>
+      <button class="kw" type="button">주방 꿀템</button>
+      <button class="kw" type="button">반려동물 장난감</button>
+      <button class="kw" type="button">수납 정리</button>
+      <button class="kw" type="button">차량 용품</button>
+      <button class="kw" type="button">문구 세트</button>
+    </div>
+
+    <div class="filter-row">
+      <label class="check"><input id="rocketOnly" type="checkbox"> 🚀 로켓배송만</label>
+      <label class="check"><input id="under10k" type="checkbox"> 💸 1만 원 이하</label>
+      <label class="select-wrap">정렬
+        <select id="sort">
+          <option value="value">가성비 점수순</option>
+          <option value="price">가격 낮은순</option>
+          <option value="discount">할인율 높은순</option>
+          <option value="rank">인기순</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <div id="resultMeta" class="result-meta hidden"></div>
+  <div id="note" class="note hidden"></div>
+
+  <section id="results" class="grid" aria-live="polite"></section>
+
+  <div id="empty" class="empty">
+    <span class="emoji">🔎</span>
+    <p>검색어를 넣고 <b>검색</b>을 눌러 보세요.<br>가성비 점수 = (최저가 ÷ 이 상품 가격) 70점 + 인기순위 30점</p>
+  </div>
+
+  <footer class="foot">
+    <p>키는 이 PC의 <code>coupas-api-key.env</code>에만 저장되고 어디에도 전송되지 않습니다. 쿠팡 파트너스 활동의 일환으로 수수료를 받을 수 있습니다.</p>
+  </footer>
+</main>
+
+<!-- 상품 링크 시트 -->
+<div id="linkSheet" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-backdrop" data-close="1"></div>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2 id="sheetTitle">4채널 링크</h2>
+      <button id="sheetClose" class="icon-btn" type="button" aria-label="닫기">✕</button>
+    </div>
+    <div id="sheetProduct" class="sheet-product"></div>
+    <div id="sheetProgress" class="sheet-progress hidden"><span class="spinner"></span> 4개 채널 링크를 만드는 중…</div>
+    <div id="sheetLinks" class="link-list"></div>
+    <div class="sheet-actions">
+      <button id="copyAllLinks" class="primary-btn" type="button">📋 4개 링크 모두 복사</button>
+      <button id="copySnippet" class="ghost-btn" type="button">{"{}"} shop-links JSON 복사</button>
+      <button id="copyImage" class="ghost-btn" type="button">🖼 이미지 URL 복사</button>
+    </div>
+    <p id="snippetHint" class="snippet-hint"></p>
+  </div>
+</div>
+
+<!-- 키 설정 시트 -->
+<div id="keySheet" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="keyTitle">
+  <div class="sheet-backdrop" data-close="1"></div>
+  <div class="sheet-panel small">
+    <div class="sheet-head">
+      <h2 id="keyTitle">🔑 쿠팡 파트너스 키 설정</h2>
+      <button id="keyClose" class="icon-btn" type="button" aria-label="닫기">✕</button>
+    </div>
+    <p class="sheet-desc">
+      쿠팡 파트너스 → 도구 → <b>Open API</b>에서 발급한 Access Key 와 Secret Key 를 넣으면
+      이 PC 안의 <code>coupas-api-key.env</code>(권한 600)에만 저장됩니다.
+      서버가 키 값을 다시 보여 주지 않으니 필요하면 파트너스에서 다시 확인하세요.
+    </p>
+    <label class="field">Access Key
+      <input id="accessKey" type="text" placeholder="Access Key 붙여넣기" spellcheck="false" autocomplete="off">
+    </label>
+    <label class="field">Secret Key
+      <input id="secretKey" type="password" placeholder="Secret Key 붙여넣기" spellcheck="false" autocomplete="off">
+    </label>
+    <div id="keyMsg" class="key-msg hidden"></div>
+    <div class="sheet-actions">
+      <button id="saveKey" class="primary-btn" type="button">저장하고 확인</button>
+      <button id="removeKey" class="ghost-btn danger" type="button">이 PC의 키 삭제</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

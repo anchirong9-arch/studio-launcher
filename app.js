@@ -1,0 +1,312 @@
+/* 통합 스튜디오 허브 — 서버 상태 확인 + 바로가기
+   GitHub Pages(https)에서도, 로컬 허브(127.0.0.1:8770)에서도 같은 파일을 씁니다. */
+(() => {
+  'use strict';
+
+  const SERVERS = [
+    { id: 'tts-studio',    port: 8765 },
+    { id: 'shorts-maker',  port: 8766 },
+    { id: 'coupas-hunter', port: 8767 },
+  ];
+  const HUB_PORT = 8770;
+  const HUB_BASE = location.port === String(HUB_PORT) ? '' : `http://127.0.0.1:${HUB_PORT}`;
+  const IS_LOCAL_HUB = location.port === String(HUB_PORT);
+
+  const $  = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  const cards = {};
+  SERVERS.forEach(s => { cards[s.id] = $(`[data-tool="${s.id}"]`); });
+
+  let hub = null;              // 로컬 허브 /api/status 결과 (없으면 null)
+  let busy = false;
+  let lastCheck = 0;
+
+  /* ───────── 유틸 ───────── */
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('timeout')), ms);
+      promise.then(v => { clearTimeout(t); resolve(v); },
+                   e => { clearTimeout(t); reject(e); });
+    });
+  }
+
+  function toast(msg, ms = 2400) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.hidden = true; }, ms);
+  }
+
+  async function getJSON(url, ms = 2500) {
+    const res = await withTimeout(fetch(url, { cache: 'no-store' }), ms);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+
+  /* 서버 하나 상태 확인 — CORS 응답이 막히면 no-cors 로 도달 여부만이라도 확인 */
+  async function ping(port) {
+    const url = `http://127.0.0.1:${port}/health?t=${Date.now()}`;
+    try {
+      const data = await getJSON(url, 2600);
+      return { online: true, data };
+    } catch (err) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 1800);
+        await fetch(`http://127.0.0.1:${port}/health`, {
+          mode: 'no-cors', cache: 'no-store', signal: ctrl.signal,
+        });
+        clearTimeout(t);
+        return { online: true, data: null, opaque: true };
+      } catch (err2) {
+        return { online: false };
+      }
+    }
+  }
+
+  async function getHub() {
+    try {
+      const data = await getJSON(`${HUB_BASE}/api/status`, 2000);
+      return data && data.app === 'studio-launcher' ? data : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /* ───────── 카드 렌더 ───────── */
+  function detailText(id, h) {
+    if (!h) return '';
+    if (id === 'tts-studio') {
+      return h.edge_tts
+        ? `edge-tts ${h.edge_tts} · 목소리 ${(h.voices || []).length}종`
+        : 'edge-tts 미설치 — 실행하기.bat 을 다시 실행해 주세요';
+    }
+    if (id === 'shorts-maker') {
+      return h.ffmpeg ? `ffmpeg ${h.ffmpeg} · 1080×1920 · ${h.fps || 30}fps`
+                      : 'ffmpeg 준비 안 됨 — 실행하기.bat 을 다시 실행해 주세요';
+    }
+    if (id === 'coupas-hunter') {
+      return h.keySet ? `쿠팡 키 등록됨 · ${h.keyHint || ''}` : '쿠팡 파트너스 키 등록 필요';
+    }
+    return '';
+  }
+
+  function setPill(card, state, label) {
+    const pill = $('[data-pill]', card);
+    pill.className = 'pill ' + state;
+    $('span', pill).textContent = label;
+  }
+
+  function renderServer(server, result, hubTool) {
+    const card = cards[server.id];
+    if (!card) return;
+    card.classList.toggle('on', !!result.online);
+
+    const detail = $('[data-detail]', card);
+    const openBtn = $('[data-open]', card);
+    const startBtn = $('[data-start]', card);
+
+    if (result.online) {
+      setPill(card, 'on', '켜짐');
+      detail.textContent = result.opaque
+        ? `포트 ${server.port} 응답 있음 · 상태 정보는 못 읽었어요`
+        : (detailText(server.id, result.data) || `포트 ${server.port} · 127.0.0.1`);
+      openBtn.removeAttribute('aria-disabled');
+    } else if (hubTool && hubTool.error) {
+      setPill(card, 'off', '충돌');
+      detail.textContent = hubTool.error;
+      openBtn.setAttribute('aria-disabled', 'true');
+    } else {
+      setPill(card, 'off', '꺼짐');
+      detail.textContent = `포트 ${server.port} · 실행하기.bat 을 켜면 자동으로 붙어요`;
+      openBtn.setAttribute('aria-disabled', 'true');
+    }
+
+    // '다시 켜기' — 로컬 허브가 켜져 있을 때만 의미가 있음
+    if (hub) {
+      startBtn.hidden = !!result.online || !!(hubTool && hubTool.managed);
+      startBtn.disabled = false;
+    } else {
+      startBtn.hidden = true;
+    }
+  }
+
+  function renderSummary(results, hubTools) {
+    const online = results.filter(r => r.online).length;
+    const sum = $('#sum');
+    sum.className = 'sum ' + (online === 3 ? 'on' : online > 0 ? 'wait' : 'off');
+    $('#sum b').textContent = online === 0 ? '서버 꺼짐' : `${online}/3 온라인`;
+
+    $('#offlineBanner').hidden = online > 0;
+    const stopBtn = $('#stopAll');
+    stopBtn.hidden = !hub || online === 0;
+
+    return online;
+  }
+
+  function renderKeyPanel(results) {
+    const coupas = results.find(r => r.id === 'coupas-hunter');
+    const panel = $('#keyPanel');
+    const data = coupas && coupas.online ? coupas.data : null;
+
+    if (!data) { panel.hidden = true; return; }
+    panel.hidden = false;
+
+    const state = $('#keyState');
+    const done = $('#keyDone');
+    const formWrap = $('#keyFormWrap');
+
+    if (data.keySet) {
+      state.className = 'pill on';
+      state.textContent = '등록됨';
+      done.hidden = false;
+      formWrap.hidden = true;
+      $('[data-keyhint]').textContent = data.keyHint || '—';
+    } else {
+      state.className = 'pill warn';
+      state.textContent = '키 필요';
+      done.hidden = true;
+      formWrap.hidden = false;
+    }
+  }
+
+  /* ───────── 전체 갱신 ───────── */
+  async function refresh(manual = false) {
+    if (busy) return;
+    busy = true;
+    if (manual) $('#refresh').classList.add('spin');
+
+    const hubData = await getHub();
+    hub = hubData;
+    const hubTools = {};
+    if (hubData) (hubData.tools || []).forEach(t => { hubTools[t.id] = t; });
+
+    const results = await Promise.all(
+      SERVERS.map(async s => Object.assign({ id: s.id, port: s.port }, await ping(s.port)))
+    );
+
+    // 허브가 아는 정보(관리 중인 프로세스, 충돌 사유)를 덧붙임
+    results.forEach(r => {
+      const ht = hubTools[r.id];
+      if (ht && !r.online && ht.online) {
+        // 허브는 응답했는데 브라우저가 직접 못 읽은 경우 (CORS/혼합 콘텐츠)
+        r.online = true;
+        r.data = ht.health || null;
+        r.opaque = true;
+      }
+    });
+
+    SERVERS.forEach(s => renderServer(s, results.find(r => r.id === s.id), hubTools[s.id]));
+    renderSummary(results, hubTools);
+    renderKeyPanel(results);
+
+    $('#hubLink').hidden = IS_LOCAL_HUB;
+    lastCheck = Date.now();
+    busy = false;
+    if (manual) setTimeout(() => $('#refresh').classList.remove('spin'), 400);
+  }
+
+  /* ───────── 이벤트 ───────── */
+  $('#refresh').addEventListener('click', () => refresh(true));
+
+  $$('.card.srv').forEach(card => {
+    $('[data-open]', card).addEventListener('click', ev => {
+      if (ev.currentTarget.getAttribute('aria-disabled') === 'true') {
+        ev.preventDefault();
+        toast('서버가 꺼져 있어요. 실행하기.bat 을 먼저 켜 주세요.');
+      }
+    });
+
+    $('[data-start]', card).addEventListener('click', async ev => {
+      const btn = ev.currentTarget;
+      const tool = card.dataset.tool;
+      btn.disabled = true;
+      btn.textContent = '켜는 중…';
+      try {
+        const res = await fetch(`${HUB_BASE}/api/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool }),
+        });
+        const data = await res.json();
+        toast(data.ok ? '다시 켰어요. 잠시 뒤 새로고침될 거예요.' : (data.result && data.result.error) || data.error || '켜지 못했어요.');
+      } catch (err) {
+        toast('로컬 허브가 꺼져 있어요. 실행하기.bat 을 다시 실행해 주세요.');
+      } finally {
+        btn.textContent = '다시 켜기';
+        setTimeout(() => refresh(true), 1400);
+      }
+    });
+  });
+
+  $('#stopAll').addEventListener('click', async () => {
+    if (!confirm('이 런처가 켠 서버를 모두 끌까요?')) return;
+    try {
+      const res = await fetch(`${HUB_BASE}/api/shutdown`, { method: 'POST' });
+      const data = await res.json();
+      toast(data.remaining && data.remaining.length
+        ? `${data.message} 이미 켜져 있던 ${data.remaining.join(', ')}는 그대로 둘게요.`
+        : '서버를 모두 정리했어요.');
+    } catch (err) {
+      toast('로컬 허브가 꺼져 있어요.');
+    }
+    setTimeout(() => refresh(true), 1500);
+  });
+
+  $('#keyChange').addEventListener('click', () => {
+    $('#keyDone').hidden = true;
+    $('#keyFormWrap').hidden = false;
+    $('#kAccess').focus();
+  });
+
+  $('#keyForm').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const msg = $('#keyMsg');
+    const btn = $('#keySubmit');
+    const access = $('#kAccess').value.trim();
+    const secret = $('#kSecret').value.trim();
+    if (!access || !secret) { msg.className = 'msg err'; msg.textContent = '두 칸을 모두 채워 주세요.'; return; }
+
+    btn.disabled = true;
+    msg.className = 'msg';
+    msg.textContent = '쿠팡 API로 확인하는 중…';
+    try {
+      const res = await fetch('http://127.0.0.1:8767/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_key: access, secret_key: secret }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        msg.className = 'msg ok';
+        msg.textContent = data.message || '저장했어요.';
+        $('#kSecret').value = '';
+        $('#kSecret').type = 'password';
+        setTimeout(() => refresh(true), 700);
+      } else {
+        msg.className = 'msg err';
+        msg.textContent = data.error || '저장하지 못했어요.';
+      }
+    } catch (err) {
+      msg.className = 'msg err';
+      msg.textContent = '쿠파스 헌터 서버가 응답하지 않아요. 서버를 먼저 켜 주세요.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // 10초마다, 화면을 보고 있을 때만 자동 확인
+  setInterval(() => {
+    if (document.hidden) return;
+    if (Date.now() - lastCheck < 9000) return;
+    refresh(false);
+  }, 3000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refresh(false);
+  });
+
+  refresh(false);
+})();

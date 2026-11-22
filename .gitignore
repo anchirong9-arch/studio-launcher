@@ -1,0 +1,20 @@
+# 실행 중에 생기는 것들 — 저장소에 올리지 않습니다
+.venv/
+__pycache__/
+*.pyc
+logs/
+studio-launcher.zip
+
+# 쿠팡 파트너스 키 — 절대 커밋 금지
+*.env
+coupas-api-key.env
+**/coupas-api-key.env
+
+# 도구가 만든 결과물
+tools/shorts-maker/output/
+tools/shorts-maker/dev_test/
+
+# OS
+.DS_Store
+Thumbs.db
+logs-run.out
