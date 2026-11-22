@@ -72,7 +72,7 @@
     if (!h) return '';
     if (id === 'tts-studio') {
       return h.edge_tts
-        ? `edge-tts ${h.edge_tts} · 목소리 ${(h.voices || []).length}종`
+        ? `edge-tts ${h.edge_tts} · 목소리 ${(h.voices || []).length}종` + (h.gtts ? ' · 번역기 포함' : '')
         : 'edge-tts 미설치 — 실행하기.bat 을 다시 실행해 주세요';
     }
     if (id === 'shorts-maker') {

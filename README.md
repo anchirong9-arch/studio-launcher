@@ -10,7 +10,7 @@
 
 | # | 도구 | 포트 | 주소 | 하는 일 |
 | - | --- | --- | --- | --- |
-| 1 | TTS 스튜디오 | 8765 | http://127.0.0.1:8765/ | 대본 → AI 음성 `.mp3` + 단어 타이밍 `.srt` |
+| 1 | TTS 스튜디오 | 8765 | http://127.0.0.1:8765/ | 대본 → AI 음성 `.mp3` + 단어 타이밍 `.srt` · 목소리 6종 · 쇼츠 메타 프리셋 12종 |
 | 2 | 쇼츠 메이커 | 8766 | http://127.0.0.1:8766/ | 짤 + 음성 + 자막 → 1080×1920 `.mp4` |
 | 3 | 쿠파스 헌터 | 8767 | http://127.0.0.1:8767/ | 쿠팡 가성비 상품 + 4채널 단축 링크 |
 | – | 통합 허브 | 8770 | http://127.0.0.1:8770/ | 세 서버 상태 확인 · 바로가기 · 키 등록 |
@@ -29,7 +29,7 @@
 
 1. [ZIP](https://github.com/anchirong9-arch/studio-launcher/releases/latest/download/studio-launcher.zip)을 받아 `C:\studio-launcher` 처럼 **짧은 영문 경로**에 풉니다.
 2. `실행하기.bat` 을 더블클릭합니다. (파일명이 깨져 보이면 `run.bat`)
-   - 처음 한 번만 `.venv` 를 만들고 `edge-tts · imageio-ffmpeg · Pillow` 를 설치합니다. 1~3분.
+   - 처음 한 번만 `.venv` 를 만들고 `edge-tts · gTTS · imageio-ffmpeg · Pillow` 를 설치합니다. 1~3분.
    - 끝나면 브라우저가 http://127.0.0.1:8770/ 을 열고, 세 서버가 같이 켜져 있습니다.
 3. 허브의 **🔑 쿠팡 파트너스 키** 칸에 Access/Secret Key를 넣습니다. 처음 한 번만.
    - 키는 `tools\coupas-hunter\coupas-api-key.env` 에만 저장되고 저장소에는 올라가지 않습니다.
@@ -52,7 +52,7 @@ studio-launcher/
 ├─ launcher.py                       # 서버 3개 관리 + 허브 서버 (표준 라이브러리만)
 ├─ 실행하기.bat / run.bat            # 1클릭 실행
 ├─ 종료하기.bat / stop.bat           # 정리
-├─ requirements.txt                  # edge-tts · imageio-ffmpeg · Pillow
+├─ requirements.txt                  # edge-tts · gTTS · imageio-ffmpeg · Pillow
 └─ tools/
    ├─ tts-studio/                    # 8765
    ├─ shorts-maker/                  # 8766

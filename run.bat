@@ -41,7 +41,7 @@ goto check_pkg
 echo [1/3] Found the prepared environment.
 
 :check_pkg
-".venv\Scripts\python.exe" -c "import edge_tts, imageio_ffmpeg, PIL" >nul 2>nul
+".venv\Scripts\python.exe" -c "import edge_tts, gtts, imageio_ffmpeg, PIL" >nul 2>nul
 if not errorlevel 1 goto run_launcher
 
 echo [2/3] Installing packages. First time takes 1-3 minutes.

@@ -40,7 +40,7 @@ goto check_pkg
 echo [1/3] 준비된 환경을 찾았습니다.
 
 :check_pkg
-".venv\Scripts\python.exe" -c "import edge_tts, imageio_ffmpeg, PIL" >nul 2>nul
+".venv\Scripts\python.exe" -c "import edge_tts, gtts, imageio_ffmpeg, PIL" >nul 2>nul
 if not errorlevel 1 goto run_launcher
 
 echo [2/3] 필요한 패키지를 설치하는 중... 처음엔 1~3분 걸려요.

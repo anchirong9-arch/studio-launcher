@@ -303,8 +303,12 @@ def tool_status(tool: dict) -> dict:
     if data:
         if tid == "tts-studio":
             eng = data.get("edge_tts")
-            detail = ("edge-tts %s · 목소리 %d종" % (eng, len(data.get("voices") or []))) if eng \
-                else "edge-tts 미설치 — 실행하기.bat 을 다시 실행해 주세요"
+            if eng:
+                detail = "edge-tts %s · 목소리 %d종" % (eng, len(data.get("voices") or []))
+                if data.get("gtts"):
+                    detail += " · 번역기 포함"
+            else:
+                detail = "edge-tts 미설치 — 실행하기.bat 을 다시 실행해 주세요"
         elif tid == "shorts-maker":
             detail = ("ffmpeg %s · 1080×1920" % data.get("ffmpeg")) if data.get("ffmpeg") \
                 else "ffmpeg 준비 안 됨 — 실행하기.bat 을 다시 실행해 주세요"
