@@ -397,6 +397,43 @@ def _extract_zip(zip_path: Path, dest: Path) -> None:
                 shutil.copyfileobj(src, out, 1 << 20)
 
 
+def _zip_candidates(remote: dict) -> list[str]:
+    """업데이트 ZIP 주소 — version.json 의 zip → zip_fallback → 기본 릴리스."""
+    urls: list[str] = []
+    for candidate in (remote.get("zip"), remote.get("zip_fallback"), DEFAULT_ZIP_URL):
+        if candidate and str(candidate) not in urls:
+            urls.append(str(candidate))
+    return urls
+
+
+def _stage_zip(url: str, tmpdir: Path, target_version: str) -> Path:
+    """ZIP 하나를 받아 풀고 검증합니다. 이상하면 예외."""
+    zip_path = tmpdir / "update.zip"
+    log("v%s 내려받는 중... (%s)" % (target_version, url.split("//")[-1][:60]))
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "%s/%s" % (USER_AGENT, SERVER_VERSION),
+        "Accept": "application/zip, application/octet-stream",
+    })
+    with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT) as res, zip_path.open("wb") as out:
+        shutil.copyfileobj(res, out, 1 << 20)
+
+    stage = tmpdir / ("x%d" % int(time.time() * 1000))
+    _extract_zip(zip_path, stage)
+
+    root = stage
+    if not (root / "launcher.py").is_file():          # ZIP 안에 폴더 하나만 있는 경우
+        dirs = [p for p in stage.iterdir() if p.is_dir()]
+        if len(dirs) == 1:
+            root = dirs[0]
+    if not (root / "launcher.py").is_file() or not (root / "version.json").is_file():
+        raise ValueError("받은 ZIP 이 런처 파일이 아니에요.")
+
+    packed = json.loads((root / "version.json").read_text(encoding="utf-8"))
+    if _parse_version(packed.get("version")) < _parse_version(target_version):
+        raise ValueError("ZIP 안의 버전(%s)이 안내된 버전(%s)보다 낮아요." % (packed.get("version"), target_version))
+    return root
+
+
 def apply_update(remote: dict | None = None, reason: str = "startup") -> dict:
     """최신 ZIP 을 받아 이 폴더를 덮어씁니다. .venv·logs·키·작업물은 보존."""
     remote = remote or fetch_remote_version()
@@ -415,27 +452,19 @@ def apply_update(remote: dict | None = None, reason: str = "startup") -> dict:
     if _parse_version(target_version) <= _parse_version(SERVER_VERSION):
         return {"ok": True, "uptodate": True, "version": SERVER_VERSION}
 
-    url = str(remote.get("zip") or DEFAULT_ZIP_URL)
     tmpdir = Path(tempfile.mkdtemp(prefix="studio-launcher-update-"))
     try:
-        zip_path = tmpdir / "update.zip"
-        log("새 버전 v%s 를 내려받는 중..." % target_version)
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "%s/%s" % (USER_AGENT, SERVER_VERSION),
-            "Accept": "application/zip, application/octet-stream",
-        })
-        with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT) as res, zip_path.open("wb") as out:
-            shutil.copyfileobj(res, out, 1 << 20)
-
-        stage = tmpdir / "x"
-        _extract_zip(zip_path, stage)
-        root = stage / "studio-launcher" if (stage / "studio-launcher").is_dir() else stage
-        if not (root / "launcher.py").is_file() or not (root / "version.json").is_file():
-            raise ValueError("받은 ZIP 이 런처 파일이 아니에요.")
-
-        packed = json.loads((root / "version.json").read_text(encoding="utf-8"))
-        if _parse_version(packed.get("version")) < _parse_version(target_version):
-            raise ValueError("ZIP 안의 버전(%s)이 안내된 버전(%s)보다 낮아요." % (packed.get("version"), target_version))
+        root = None
+        errors: list[str] = []
+        for url in _zip_candidates(remote):
+            try:
+                root = _stage_zip(url, tmpdir, target_version)
+                break
+            except Exception as exc:  # noqa: BLE001
+                errors.append("%s: %s" % (url.rsplit("/", 1)[-1], exc))
+                log("이 주소로는 받지 못했습니다 — %s" % exc)
+        if root is None:
+            raise ValueError("업데이트 파일을 받지 못했어요. " + " / ".join(errors[:2]))
 
         backup = LOG_DIR / "backup"
         backup.mkdir(parents=True, exist_ok=True)
