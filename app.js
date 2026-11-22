@@ -45,24 +45,16 @@
     return res.json();
   }
 
-  /* 서버 하나 상태 확인 — CORS 응답이 막히면 no-cors 로 도달 여부만이라도 확인 */
+  /* 서버 하나 상태 확인 — 세 서버 모두 /health 에 CORS·Private Network 헤더를 보냅니다.
+     실제 응답을 읽지 못하면 '꺼짐'으로 봅니다. (프록시 환경에서 도달 여부만으로 판단하면
+     꺼진 서버도 켜진 것처럼 보이기 때문) */
   async function ping(port) {
     const url = `http://127.0.0.1:${port}/health?t=${Date.now()}`;
     try {
       const data = await getJSON(url, 2600);
       return { online: true, data };
     } catch (err) {
-      try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 1800);
-        await fetch(`http://127.0.0.1:${port}/health`, {
-          mode: 'no-cors', cache: 'no-store', signal: ctrl.signal,
-        });
-        clearTimeout(t);
-        return { online: true, data: null, opaque: true };
-      } catch (err2) {
-        return { online: false };
-      }
+      return { online: false };
     }
   }
 

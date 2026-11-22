@@ -10,7 +10,7 @@
 <meta property="og:description" content="PC 서버 3종 상태 확인 + 원클릭 이동 · 웹 도구 5종 · 런처 ZIP 다운로드">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0f13'/%3E%3Cpath d='M9 21.5 16 8l7 13.5' stroke='%23ff4d6d' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='24' r='2.4' fill='%236c8cff'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 
@@ -63,7 +63,7 @@
   <section class="block">
     <div class="block-head">
       <h2>① PC에서 켜는 서버 <span class="cnt">3</span></h2>
-      <p class="block-sub">초록불이면 그 도구가 지금 이 PC에서 돌고 있다는 뜻이에요.</p>
+      <p class="block-sub">초록불이면 그 도구가 지금 이 PC에서 돌고 있다는 뜻이에요. 이 페이지를 연 브라우저가 내 PC 서버에 직접 물어본 결과라서, 휴대폰에서 열면 늘 꺼짐으로 보입니다.</p>
     </div>
 
     <div class="grid">
@@ -268,7 +268,7 @@
     <div class="faq">
       <details>
         <summary>초록불이 안 켜져요</summary>
-        <p><code>실행하기.bat</code> 창이 닫혔는지 확인해 주세요. 창을 닫으면 서버도 꺼집니다. 다시 켜면 이 페이지가 10초 안에 초록불로 바뀌어요.</p>
+        <p><code>실행하기.bat</code> 창이 닫혔는지 확인해 주세요. 창을 닫으면 서버도 꺼집니다. 다시 켜면 이 페이지가 10초 안에 초록불로 바뀌어요. 브라우저가 로컬 접속을 막는 설정(일부 사파리·회사 프록시)이면 서버가 켜져 있어도 꺼짐으로 보일 수 있으니, 그때는 카드의 <b>열기</b>로 직접 들어가 보세요.</p>
       </details>
       <details>
         <summary>포트 8765·8766·8767이 이미 쓰인다고 나와요</summary>
@@ -298,6 +298,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
