@@ -3,11 +3,11 @@ rem English-named launcher, same as 실행하기.bat in case the Korean filename
 chcp 65001 >nul 2>nul
 setlocal
 cd /d "%~dp0"
-title Studio Launcher - TTS / Shorts / Coupas / Video Cut
+title BaekSutalk Studio - TTS / Shorts / Coupas / Video Cut
 color 0B
 
 echo ==========================================================
-echo    Studio Launcher  -  TTS / Shorts / Coupas / Video Cut
+echo    BaekSutalk Studio - TTS / Shorts / Coupas / Video Cut
 echo ==========================================================
 echo.
 
@@ -57,11 +57,22 @@ echo        Coupas Hunter still works. TTS and Shorts will continue installing n
 echo.
 
 :run_launcher
-echo [3/3] Starting the 4 servers and opening the browser.
+echo [3/3] Checking for updates, starting the 4 servers, opening the app window.
 echo.
-echo    * Closing this window stops the servers.
-echo    * Hub: http://127.0.0.1:8770
+if not exist ".venv\Scripts\pythonw.exe" goto run_console
+start "" ".venv\Scripts\pythonw.exe" "%~dp0launcher.py"
+timeout /t 2 >nul
+echo    * No console window stays open. Servers run in the background.
+echo    * Hub: http://127.0.0.1:8770/
+echo    * Stop: stop.bat  /  Log: logs\launcher.log
+echo    * Desktop shortcut: make-shortcut.bat
 echo.
+echo This window can be closed.
+timeout /t 3 >nul
+exit /b 0
+
+:run_console
+echo    (pythonw not found - running in this window)
 ".venv\Scripts\python.exe" launcher.py
 goto end
 

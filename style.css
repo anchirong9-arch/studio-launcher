@@ -132,6 +132,23 @@ code{
 
 .fine{margin:12px 0 0;font-size:11.5px;color:var(--dim)}
 
+/* ── 버전 · 업데이트 ── */
+.verbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:11px 14px;border-radius:14px;
+  background:linear-gradient(180deg,#141a22 0%,#12161c 100%);
+  border:1px solid var(--line);
+}
+.ver-txt{display:flex;flex-direction:column;gap:2px;min-width:210px}
+.ver-txt b{font-size:12.5px;font-weight:700;color:#cdd4e0}
+.ver-txt b span:last-child{color:var(--txt);font-variant-numeric:tabular-nums}
+.ver-txt>span{font-size:11.5px;color:var(--muted)}
+.verbar.ok{border-color:#22402f;background:linear-gradient(180deg,#131b17 0%,#111713 100%)}
+.verbar.ok #verLatest{color:#7fbba2}
+.verbar.new{border-color:#4a3418;background:linear-gradient(180deg,#221a12 0%,#1a1510 100%)}
+.verbar.new #verLatest{color:#ffd08a}
+.ver-actions{display:flex;gap:7px;flex-wrap:wrap}
+
 /* ── banner ── */
 .banner{
   display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between;
@@ -362,6 +379,8 @@ code{
   .app-ico{width:52px;height:52px;border-radius:15px}
   .app-ico svg{width:24px;height:24px}
   .app-name{font-size:11px}
+  .verbar{flex-direction:column;align-items:stretch;padding:12px 13px}
+  .ver-actions .btn{flex:1}
 }
 
 @media (prefers-reduced-motion:reduce){

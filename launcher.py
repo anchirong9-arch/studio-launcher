@@ -15,12 +15,18 @@
   * 이미 켜져 있는 서버는 그대로 씁니다. (같은 서버를 두 번 켜지 않음)
   * 포트가 다른 프로그램에 잡혀 있으면 그 사실을 알려 줍니다.
   * 각 서버의 화면은 이 창(숨김)에서 돌아가고, 로그는 logs/<도구>.log 에 쌓입니다.
+  * 실행할 때 GitHub 의 version.json 을 3초만 확인해 새 버전이 있으면 ZIP 을 받아
+    이 폴더를 덮어쓰고 새 코드로 다시 시작합니다. (.venv·logs·키 파일은 그대로 둡니다)
+  * 브라우저는 Edge/Chrome 의 --app 모드(주소창 없는 앱 창)로 열고, 없으면 기본 브라우저.
   * 이 창을 닫거나 Ctrl+C 를 누르면 같이 켠 서버도 정리합니다.
 
 실행
-  python launcher.py               서버 4개 + 허브를 켜고 브라우저를 엽니다
-  python launcher.py --no-open     브라우저는 열지 않습니다
+  python launcher.py               서버 4개 + 허브를 켜고 앱 창을 엽니다
+  python launcher.py --no-open     창은 열지 않습니다
   python launcher.py --stop        이 런처가 켠 서버와 허브를 끕니다
+  python launcher.py --update      새 버전을 확인하고 지금 업데이트합니다
+  python launcher.py --no-update   이번 실행에서는 업데이트를 확인하지 않습니다
+  python launcher.py --version     버전만 출력합니다
 
 Python 3.9 이상, 표준 라이브러리만 사용합니다. (도구별 패키지는 실행하기.bat 이 설치)
 """
@@ -30,15 +36,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shutil
 import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 import webbrowser
+import zipfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -46,12 +56,43 @@ BASE_DIR = Path(__file__).resolve().parent
 TOOLS_DIR = BASE_DIR / "tools"
 LOG_DIR = BASE_DIR / "logs"
 PID_FILE = LOG_DIR / "launcher.json"
+VERSION_FILE = BASE_DIR / "version.json"
+LAUNCHER_LOG = LOG_DIR / "launcher.log"
+UPDATE_RECORD = LOG_DIR / "update.json"
 
 HUB_HOST = "127.0.0.1"
 HUB_PORT = 8770
-SERVER_VERSION = "1.0.0"
 HEALTH_TIMEOUT = 1.2
 START_WAIT = 25.0
+
+# ── 앱 정보 · 업데이트 ──
+APP_NAME = "백수톡 스튜디오"
+REPO = "anchirong9-arch/studio-launcher"
+DEFAULT_VERSION_URL = "https://raw.githubusercontent.com/%s/main/version.json" % REPO
+DEFAULT_ZIP_URL = "https://github.com/%s/releases/latest/download/studio-launcher.zip" % REPO
+UPDATE_TIMEOUT = 3.0        # 버전 확인 — 느리면 그냥 넘어갑니다
+DOWNLOAD_TIMEOUT = 30.0     # ZIP 내려받기
+UPDATE_CACHE_SECONDS = 600
+USER_AGENT = "StudioLauncher"
+
+# 업데이트할 때 절대 건드리지 않는 것들
+PRESERVE_DIRS = {".venv", ".git", "logs", "updates", "__pycache__", "node_modules", "jobs", "output", "dev_test"}
+PRESERVE_SUFFIXES = {".env", ".pyc", ".log"}
+PRESERVE_NAMES = {"coupas-api-key.env", "launcher.json"}
+
+
+def _load_version() -> str:
+    """version.json 이 있으면 그 값을, 없으면 코드에 박힌 값을 씁니다."""
+    try:
+        data = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and data.get("version"):
+            return str(data["version"])
+    except Exception:  # noqa: BLE001
+        pass
+    return "1.0.1"
+
+
+SERVER_VERSION = _load_version()
 
 # 서버 4종 정의 — 포트와 브라우저 자동 열기 끄기 옵션은 각 도구 사양 그대로
 TOOLS = [
@@ -105,12 +146,39 @@ _HUB_SERVER: ThreadingHTTPServer | None = None
 
 # ───────────────────────────── 공용 도우미 ─────────────────────────────
 
+def _append_log(line: str) -> None:
+    """pythonw(콘솔 없음)에서도 남도록 파일에도 씁니다. 400KB 넘으면 한 번 비웁니다."""
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        if LAUNCHER_LOG.exists() and LAUNCHER_LOG.stat().st_size > 400_000:
+            try:
+                LAUNCHER_LOG.replace(LAUNCHER_LOG.with_suffix(".log.1"))
+            except OSError:
+                LAUNCHER_LOG.unlink(missing_ok=True)
+        with LAUNCHER_LOG.open("a", encoding="utf-8") as fp:
+            fp.write("%s %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), line))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def log(msg: str) -> None:
-    print("[런처] " + str(msg), flush=True)
+    line = "[런처] " + str(msg)
+    _append_log(line)
+    if sys.stdout is not None:
+        try:
+            print(line, flush=True)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def warn(msg: str) -> None:
-    print("[런처] ! " + str(msg), flush=True)
+    line = "[런처] ! " + str(msg)
+    _append_log(line)
+    if sys.stdout is not None:
+        try:
+            print(line, flush=True)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def http_json(url: str, timeout: float = HEALTH_TIMEOUT) -> dict | None:
@@ -223,6 +291,259 @@ def set_tool_state(tool_id: str, **kw) -> None:
     with _STATE_LOCK:
         info = _STATE["tools"].setdefault(tool_id, {"pid": None, "owned": False, "note": "", "error": ""})
         info.update(kw)
+
+
+# ───────────────────────────── 자동 업데이트 ─────────────────────────────
+
+_UPDATE_LOCK = threading.Lock()
+_UPDATE = {
+    "latest": None,        # GitHub version.json 내용
+    "checked_at": None,    # 마지막 확인 시각(epoch)
+    "error": "",
+    "applied": None,       # 이번 실행에서 적용한 버전
+}
+
+
+def _parse_version(text) -> tuple:
+    """'v1.0.10' → (1, 0, 10) 처럼 숫자만 비교합니다."""
+    nums = [int(n) for n in re.findall(r"\d+", str(text or ""))][:4]
+    while len(nums) < 3:
+        nums.append(0)
+    return tuple(nums)
+
+
+def fetch_remote_version(timeout: float = UPDATE_TIMEOUT) -> dict | None:
+    """GitHub 의 version.json 을 짧게 확인합니다. 실패(오프라인·타임아웃)하면 None."""
+    url = DEFAULT_VERSION_URL
+    try:
+        if VERSION_FILE.is_file():
+            local = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
+            url = str(local.get("version_url") or url)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        req = urllib.request.Request(url, headers={
+            "Cache-Control": "no-cache",
+            "User-Agent": "%s/%s" % (USER_AGENT, SERVER_VERSION),
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            data = json.loads(res.read().decode("utf-8", "replace"))
+        if isinstance(data, dict) and data.get("version"):
+            return data
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def update_status() -> dict:
+    """허브에 보여 줄 현재/최신 버전 정보."""
+    with _UPDATE_LOCK:
+        latest = _UPDATE["latest"] or {}
+        checked_at = _UPDATE["checked_at"]
+        error = _UPDATE["error"] or ""
+        applied = _UPDATE["applied"]
+    latest_version = str(latest.get("version") or "")
+    return {
+        "version": SERVER_VERSION,
+        "latest": latest_version,
+        "updateAvailable": bool(latest_version) and _parse_version(latest_version) > _parse_version(SERVER_VERSION),
+        "checked": checked_at is not None,
+        "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(checked_at)) if checked_at else "",
+        "notes": latest.get("notes") or [],
+        "zip": latest.get("zip") or DEFAULT_ZIP_URL,
+        "error": error,
+        "applied": applied,
+    }
+
+
+def _skip_in_update(rel: Path) -> bool:
+    """업데이트로 덮어쓰면 안 되는 파일인가?"""
+    if any(part in PRESERVE_DIRS for part in rel.parts[:-1]):
+        return True
+    if rel.name in PRESERVE_NAMES or rel.suffix.lower() in PRESERVE_SUFFIXES:
+        return True
+    if rel.name.endswith(".env"):
+        return True
+    return False
+
+
+def _extract_zip(zip_path: Path, dest: Path) -> None:
+    """경로 탈출(../) 을 막으면서 풉니다."""
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            name = info.filename.replace("\\", "/")
+            if not name or name.endswith("/"):
+                continue
+            parts = Path(name).parts
+            if name.startswith("/") or ".." in parts or re.match(r"^[A-Za-z]:", name):
+                raise ValueError("압축 파일에 이상한 경로가 있어요: %s" % name)
+            target = dest.joinpath(*parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info) as src, target.open("wb") as out:
+                shutil.copyfileobj(src, out, 1 << 20)
+
+
+def apply_update(remote: dict | None = None, reason: str = "startup") -> dict:
+    """최신 ZIP 을 받아 이 폴더를 덮어씁니다. .venv·logs·키·작업물은 보존."""
+    remote = remote or fetch_remote_version()
+    if not remote:
+        with _UPDATE_LOCK:
+            _UPDATE["error"] = "최신 버전 정보를 받지 못했어요."
+            _UPDATE["checked_at"] = time.time()
+        return {"ok": False, "error": "최신 버전 정보를 받지 못했어요. (오프라인일 수 있어요)"}
+
+    target_version = str(remote.get("version") or "")
+    with _UPDATE_LOCK:
+        _UPDATE["latest"] = remote
+        _UPDATE["checked_at"] = time.time()
+        _UPDATE["error"] = ""
+
+    if _parse_version(target_version) <= _parse_version(SERVER_VERSION):
+        return {"ok": True, "uptodate": True, "version": SERVER_VERSION}
+
+    url = str(remote.get("zip") or DEFAULT_ZIP_URL)
+    tmpdir = Path(tempfile.mkdtemp(prefix="studio-launcher-update-"))
+    try:
+        zip_path = tmpdir / "update.zip"
+        log("새 버전 v%s 를 내려받는 중..." % target_version)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "%s/%s" % (USER_AGENT, SERVER_VERSION),
+            "Accept": "application/zip, application/octet-stream",
+        })
+        with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT) as res, zip_path.open("wb") as out:
+            shutil.copyfileobj(res, out, 1 << 20)
+
+        stage = tmpdir / "x"
+        _extract_zip(zip_path, stage)
+        root = stage / "studio-launcher" if (stage / "studio-launcher").is_dir() else stage
+        if not (root / "launcher.py").is_file() or not (root / "version.json").is_file():
+            raise ValueError("받은 ZIP 이 런처 파일이 아니에요.")
+
+        packed = json.loads((root / "version.json").read_text(encoding="utf-8"))
+        if _parse_version(packed.get("version")) < _parse_version(target_version):
+            raise ValueError("ZIP 안의 버전(%s)이 안내된 버전(%s)보다 낮아요." % (packed.get("version"), target_version))
+
+        backup = LOG_DIR / "backup"
+        backup.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root)
+            if _skip_in_update(rel):
+                continue
+            dest = BASE_DIR.joinpath(*rel.parts)
+            if len(rel.parts) == 1 and dest.is_file():      # 최상위 파일은 백업해 둠
+                try:
+                    shutil.copy2(dest, backup / rel.name)
+                except OSError:
+                    pass
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, dest)
+            copied += 1
+
+        with _UPDATE_LOCK:
+            _UPDATE["applied"] = target_version
+        try:
+            UPDATE_RECORD.write_text(json.dumps({
+                "version": target_version,
+                "previous": SERVER_VERSION,
+                "applied_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "reason": reason,
+                "files": copied,
+            }, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+        log("업데이트 완료: v%s → v%s (%d개 파일)" % (SERVER_VERSION, target_version, copied))
+        return {"ok": True, "version": target_version, "previous": SERVER_VERSION, "files": copied}
+    except Exception as exc:  # noqa: BLE001
+        with _UPDATE_LOCK:
+            _UPDATE["error"] = str(exc)
+        log("업데이트를 건너뛰었습니다: %s" % exc)
+        return {"ok": False, "error": str(exc)}
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def auto_update_at_start() -> None:
+    """실행 직전에 한 번만. 실패하면 조용히 현재 버전으로 진행합니다."""
+    if os.environ.get("STUDIO_LAUNCHER_UPDATED") == "1":
+        return
+    remote = fetch_remote_version()
+    with _UPDATE_LOCK:
+        _UPDATE["checked_at"] = time.time()
+        if remote:
+            _UPDATE["latest"] = remote
+            _UPDATE["error"] = ""
+        else:
+            _UPDATE["error"] = "버전 확인 실패 (오프라인?)"
+    if not remote:
+        log("새 버전 확인을 건너뜁니다. v%s 로 실행합니다." % SERVER_VERSION)
+        return
+    if _parse_version(remote["version"]) <= _parse_version(SERVER_VERSION):
+        log("최신 버전입니다. (v%s)" % SERVER_VERSION)
+        return
+
+    result = apply_update(remote, "startup")
+    if not result.get("ok"):
+        log("지금은 v%s 로 계속 실행합니다." % SERVER_VERSION)
+        return
+
+    os.environ["STUDIO_LAUNCHER_UPDATED"] = "1"
+    log("새 버전 v%s 로 다시 시작합니다..." % result.get("version"))
+    try:
+        os.execv(sys.executable, [sys.executable, str(BASE_DIR / "launcher.py")] + sys.argv[1:])
+    except Exception as exc:  # noqa: BLE001
+        log("다시 시작하지 못했습니다(%s). 이번에는 v%s 로 실행하고, 다음 실행부터 새 버전입니다."
+            % (exc, SERVER_VERSION))
+
+
+# ───────────────────────────── 앱 창으로 열기 ─────────────────────────────
+
+def _browser_exe() -> list[Path]:
+    """Edge → Chrome 순서로 설치된 실행 파일을 찾습니다."""
+    if os.name != "nt":
+        return []
+    found: list[Path] = []
+    envs = [os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")]
+    rels = [
+        r"Microsoft\Edge\Application\msedge.exe",
+        r"Google\Chrome\Application\chrome.exe",
+        r"Microsoft\Edge Beta\Application\msedge.exe",
+    ]
+    for base in envs:
+        if not base:
+            continue
+        for rel in rels:
+            cand = Path(base) / rel
+            if cand.is_file() and cand not in found:
+                found.append(cand)
+    return found
+
+
+def open_app_window(url: str) -> bool:
+    """주소창 없는 앱 창(Edge/Chrome --app)으로 엽니다. 없으면 기본 브라우저."""
+    for exe in _browser_exe():
+        try:
+            kwargs = {}
+            if os.name == "nt":
+                kwargs["creationflags"] = 0x00000008  # DETACHED_PROCESS
+            subprocess.Popen(
+                [str(exe), "--app=" + url, "--window-size=1200,900",
+                 "--no-first-run", "--no-default-browser-check"],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                close_fds=True, **kwargs,
+            )
+            log("앱 창으로 열었습니다 (%s)" % exe.name)
+            return True
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        webbrowser.open(url)
+        log("기본 브라우저로 열었습니다: %s" % url)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # ───────────────────────────── 서버 켜기 ─────────────────────────────
@@ -395,6 +716,8 @@ class HubHandler(SimpleHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path in ("/api/status", "/health"):
             return self.json_out(snapshot())
+        if path == "/api/version":
+            return self.json_out(dict({"ok": True, "app": "studio-launcher"}, **update_status()))
         return super().do_GET()
 
     def do_POST(self):  # noqa: N802
@@ -428,6 +751,21 @@ class HubHandler(SimpleHTTPRequestHandler):
             })
             threading.Thread(target=finish_shutdown, name="shutdown", daemon=True).start()
             return
+
+        if path == "/api/update/check":
+            remote = fetch_remote_version()
+            with _UPDATE_LOCK:
+                _UPDATE["checked_at"] = time.time()
+                if remote:
+                    _UPDATE["latest"] = remote
+                    _UPDATE["error"] = ""
+                else:
+                    _UPDATE["error"] = "버전 정보를 받지 못했어요 (오프라인?)"
+            return self.json_out({"ok": True, **update_status()})
+
+        if path == "/api/update/apply":
+            result = apply_update(reason="hub")
+            return self.json_out({**result, "status": update_status()}, 200 if result.get("ok") else 502)
 
         return self.json_out({"ok": False, "error": "알 수 없는 요청입니다."}, 404)
 
@@ -551,28 +889,24 @@ def stop_everything() -> int:
 # ───────────────────────────── main ─────────────────────────────
 
 def print_banner() -> None:
-    print("", flush=True)
-    print("=" * 62, flush=True)
-    print("   통합 스튜디오 런처 v%s — TTS · 쇼츠 · 쿠파스 · 컷편집 한 번에" % SERVER_VERSION, flush=True)
-    print("=" * 62, flush=True)
+    log("=" * 58)
+    log("   %s v%s — TTS · 쇼츠 · 쿠파스 · 컷편집 한 번에" % (APP_NAME, SERVER_VERSION))
+    log("=" * 58)
 
 
 def print_status_table() -> None:
-    print("", flush=True)
+    log("")
     for tool in TOOLS:
         st = tool_status(tool)
         mark = "ON " if st["online"] else "OFF"
         line = "  [%s] %-10s http://127.0.0.1:%d/" % (mark, tool["name"], tool["port"])
         if st["detail"]:
             line += "  — " + st["detail"]
-        print(line, flush=True)
+        log(line)
         if st["error"]:
-            print("        ! " + st["error"].replace("\n", " ")[:180], flush=True)
-    print("", flush=True)
-    print("  허브: http://127.0.0.1:%d/   (이 창을 닫거나 Ctrl+C 를 누르면 서버도 정리됩니다)" % HUB_PORT,
-          flush=True)
-    print("  종료가 안 되면 종료하기.bat 을 더블클릭하세요.", flush=True)
-    print("", flush=True)
+            log("        ! " + st["error"].replace("\n", " ")[:180])
+    log("  허브: http://127.0.0.1:%d/   (%s 창은 종료하기.bat 으로 정리)" % (HUB_PORT, APP_NAME))
+    log("  로그: logs/launcher.log · 도구별 로그: logs/<도구>.log")
 
 
 def monitor() -> None:
@@ -593,11 +927,14 @@ def monitor() -> None:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="통합 스튜디오 런처")
-    parser.add_argument("--no-open", dest="open_browser", action="store_false", help="브라우저를 열지 않습니다")
+    parser = argparse.ArgumentParser(description="%s 런처" % APP_NAME)
+    parser.add_argument("--no-open", dest="open_browser", action="store_false", help="창을 열지 않습니다")
     parser.add_argument("--stop", action="store_true", help="이 런처가 켠 서버를 모두 끕니다")
+    parser.add_argument("--update", action="store_true", help="새 버전을 확인하고 지금 업데이트합니다")
+    parser.add_argument("--no-update", dest="auto_update", action="store_false", help="업데이트를 확인하지 않습니다")
+    parser.add_argument("--version", action="store_true", help="버전만 출력합니다")
     parser.add_argument("--hub-port", type=int, default=HUB_PORT)
-    parser.set_defaults(open_browser=True)
+    parser.set_defaults(open_browser=True, auto_update=True)
     args = parser.parse_args(argv)
 
     if hasattr(sys.stdout, "reconfigure"):
@@ -606,12 +943,31 @@ def main(argv=None) -> int:
         except Exception:  # noqa: BLE001
             pass
 
+    if args.version:
+        log("v%s" % SERVER_VERSION)
+        return 0
+
     if args.stop:
         return stop_everything()
 
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    if args.update:
+        result = apply_update(reason="cli")
+        if result.get("ok") and not result.get("uptodate"):
+            log("업데이트했습니다. v%s → v%s. 실행하기.bat 을 다시 더블클릭하면 새 버전으로 켜집니다."
+                % (result.get("previous"), result.get("version")))
+        elif result.get("uptodate"):
+            log("이미 최신 버전입니다. (v%s)" % SERVER_VERSION)
+        else:
+            warn("업데이트하지 못했습니다: %s" % result.get("error"))
+        return 0 if result.get("ok") else 1
+
+    if args.auto_update:
+        auto_update_at_start()
+
     print_banner()
     install_console_handlers()
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     url = "http://%s:%d/" % (HUB_HOST, args.hub_port)
     already = http_json("http://%s:%d/api/status" % (HUB_HOST, args.hub_port), 0.8)
@@ -619,7 +975,7 @@ def main(argv=None) -> int:
         log("이미 켜져 있는 런처가 있습니다 → " + url)
         log("상태 확인과 꺼진 서버 다시 켜기는 허브 화면에서 하세요.")
         if args.open_browser:
-            webbrowser.open(url)
+            threading.Timer(0.4, lambda: open_app_window(url)).start()
         time.sleep(1.2)
         return 0
 
@@ -650,7 +1006,7 @@ def main(argv=None) -> int:
     print_status_table()
 
     if args.open_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.0, lambda: open_app_window(url)).start()
 
     threading.Thread(target=monitor, name="monitor", daemon=True).start()
     try:

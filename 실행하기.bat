@@ -2,11 +2,11 @@
 chcp 65001 >nul 2>nul
 setlocal
 cd /d "%~dp0"
-title 통합 스튜디오 런처 - TTS · 쇼츠 · 쿠파스 · 컷편집
+title 백수톡 스튜디오 - TTS · 쇼츠 · 쿠파스 · 컷편집
 color 0B
 
 echo ==========================================================
-echo    통합 스튜디오 런처  -  TTS · 쇼츠 · 쿠파스 · 컷편집
+echo    백수톡 스튜디오  -  TTS · 쇼츠 · 쿠파스 · 컷편집
 echo ==========================================================
 echo.
 
@@ -56,11 +56,22 @@ echo        쿠파스 헌터는 그대로 쓸 수 있고요, TTS·쇼츠는 다�
 echo.
 
 :run_launcher
-echo [3/3] 서버 4개를 켜고 브라우저를 엽니다.
+echo [3/3] 업데이트를 확인하고 서버 4개를 켜고 앱 창을 엽니다.
 echo.
-echo    * 이 검은 창을 닫으면 서버도 같이 꺼집니다.
+if not exist ".venv\Scripts\pythonw.exe" goto run_console
+start "" ".venv\Scripts\pythonw.exe" "%~dp0launcher.py"
+timeout /t 2 >nul
+echo    * 까만 창은 남지 않습니다. 서버는 백그라운드에서 돕니다.
 echo    * 허브 주소: http://127.0.0.1:8770
+echo    * 끄기: 종료하기.bat · 로그: logs\launcher.log
+echo    * 바탕화면 아이콘: 바탕화면 바로가기 만들기.bat
 echo.
+echo 이 창은 닫아도 됩니다.
+timeout /t 3 >nul
+exit /b 0
+
+:run_console
+echo    (pythonw 가 없어 이 창에서 실행합니다. 창을 닫으면 서버도 꺼집니다)
 ".venv\Scripts\python.exe" launcher.py
 goto end
 
