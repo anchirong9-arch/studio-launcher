@@ -225,6 +225,57 @@ code{
 .hint{margin:0;font-size:11.5px;color:var(--dim)}
 .hint b{color:var(--muted)}
 
+/* ── 크리에이터 툴킷: 미니 앱 아이콘 도크 ── */
+.dock{
+  display:flex;align-items:flex-start;gap:6px;
+  padding:16px 10px 12px;
+  background:linear-gradient(180deg,#151a21 0%,#12161c 100%);
+  border:1px solid var(--line);border-radius:20px;
+  overflow-x:auto;overscroll-behavior-x:contain;
+  scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.dock::-webkit-scrollbar{display:none}
+.app{
+  flex:1 0 auto;min-width:74px;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  padding:2px 3px 4px;border-radius:14px;
+  text-decoration:none;color:inherit;scroll-snap-align:center;
+  transition:transform .16s;
+}
+.app:hover{transform:translateY(-3px)}
+.app:active{transform:translateY(-1px) scale(.97)}
+.app-ico{
+  position:relative;width:56px;height:56px;border-radius:16px;flex:none;
+  display:grid;place-items:center;
+  background:linear-gradient(160deg,var(--c1,#2a3140) 0%,var(--c2,#1b2029) 100%);
+  box-shadow:0 6px 14px #0007, 0 0 0 1px #ffffff24 inset;
+  transition:box-shadow .16s;
+}
+.app:hover .app-ico{box-shadow:0 10px 20px #0008, 0 0 0 1px #ffffff38 inset}
+.app-ico::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(180deg,#ffffff30 0%,transparent 44%);
+}
+.app-ico svg{
+  position:relative;z-index:1;width:26px;height:26px;
+  fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;
+  filter:drop-shadow(0 1px 2px #0005);
+}
+.app-name{
+  font-size:11.5px;font-weight:700;color:#cdd4e0;letter-spacing:-.2px;white-space:nowrap;
+}
+.app:hover .app-name{color:#fff}
+.inline-link{color:#9db4ff;text-decoration:none}
+.inline-link:hover{text-decoration:underline}
+
+@media (min-width:641px){
+  .dock{justify-content:center;gap:10px;padding:18px 14px 14px}
+  .app{min-width:92px}
+  .app-ico{width:64px;height:64px;border-radius:18px}
+  .app-ico svg{width:30px;height:30px}
+}
+
 /* ── panel ── */
 .panel{
   background:linear-gradient(180deg,#1a1620,#151319);
@@ -306,6 +357,11 @@ code{
   .topbar{gap:8px}
   .brand small{font-size:10px}
   .ca .btn{flex:1}
+  .dock{gap:4px;padding:14px 8px 10px;border-radius:16px}
+  .app{min-width:66px}
+  .app-ico{width:52px;height:52px;border-radius:15px}
+  .app-ico svg{width:24px;height:24px}
+  .app-name{font-size:11px}
 }
 
 @media (prefers-reduced-motion:reduce){

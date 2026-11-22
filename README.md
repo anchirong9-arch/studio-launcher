@@ -1,6 +1,6 @@
 # 🚀 통합 스튜디오 런처 (studio-launcher)
 
-로컬 서버가 필요한 도구 4종을 **`실행하기.bat` 한 번**으로 같이 켜고, 웹 도구 6종은 바로 열 수 있는 통합 허브입니다.
+로컬 서버가 필요한 도구 4종을 **`실행하기.bat` 한 번**으로 같이 켜고, 웹 도구 6종과 크리에이터 툴킷 7종은 바로 열 수 있는 통합 허브입니다.
 
 - 🌐 허브 (웹): https://anchirong9-arch.github.io/studio-launcher/
 - 💻 허브 (내 PC): `실행하기.bat` 실행 후 http://127.0.0.1:8770/
@@ -26,6 +26,22 @@
 | 8 | 칼바람 추첨기 | https://anchirong9-arch.github.io/lol-aram-picker/ |
 | 9 | 다중 영상 컷 편집기 | https://anchirong9-arch.github.io/video-cutter/ |
 | 10 | shop-links | https://anchirong9-arch.github.io/shop-links/ |
+
+## 크리에이터 툴킷 7종 (허브 ③ 미니 앱 아이콘)
+
+허브 가운데의 **미니 런처 아이콘 줄**에서 바로 열립니다. 모두 브라우저 안에서만 처리하고 서버로 아무것도 보내지 않습니다.
+
+| 아이콘 | 도구 | 주소 |
+| --- | --- | --- |
+| EXIF | EXIF 제거 · 모자이크 | https://anchirong9-arch.github.io/creator-toolkit/#/exif |
+| URL | URL 추적 제거 | https://anchirong9-arch.github.io/creator-toolkit/#/url |
+| PDF | PDF ↔ 이미지 | https://anchirong9-arch.github.io/creator-toolkit/#/pdf |
+| 압축 | 이미지 압축 · 포맷 변환 | https://anchirong9-arch.github.io/creator-toolkit/#/compress |
+| QR | QR 생성기 | https://anchirong9-arch.github.io/creator-toolkit/#/qr |
+| 비율 | 비율 리사이즈 | https://anchirong9-arch.github.io/creator-toolkit/#/resize |
+| 워터마크 | 일괄 워터마크 | https://anchirong9-arch.github.io/creator-toolkit/#/mark |
+
+아이콘 이름·색·경로는 `creator-toolkit` 의 `CT.register({ id, short })` 를 그대로 따릅니다. (워터마크의 실제 라우트는 `#/watermark` 가 아니라 **`#/mark`** 입니다.)
 
 ## 처음 한 번
 
@@ -73,6 +89,7 @@ studio-launcher/
 
 ## 최근 변경
 
+- **2026-11-23 · 허브에 크리에이터 툴킷 미니 런처 추가** — 허브 ③번 자리에 크리에이터 툴킷 7종을 둥근 사각형 앱 아이콘으로 가로 나열했습니다. 모바일은 옆으로 밀어서, PC는 가운데 정렬로 보이고, 누르면 각 도구 해시 라우트가 바로 열립니다.
 - **2026-11-22 · 쿠파스 헌터 사진 수정** — 상품 카드 사진이 빈 채로 나오던 문제를 고쳤습니다. 사진을 브라우저가 쿠팡 CDN에서 직접 받지 않고, 이 PC의 서버(`/api/image`)가 대신 받아 주도록 바뀌었습니다. (사진이 안 보였다면 브라우저를 한 번 새로고침해 주세요.)
 
 ## 개발 메모
