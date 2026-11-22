@@ -1,36 +1,38 @@
 # 🚀 통합 스튜디오 런처 (studio-launcher)
 
-로컬 서버가 필요한 도구 3종을 **`실행하기.bat` 한 번**으로 같이 켜고, 웹 도구 5종은 바로 열 수 있는 통합 허브입니다.
+로컬 서버가 필요한 도구 4종을 **`실행하기.bat` 한 번**으로 같이 켜고, 웹 도구 6종은 바로 열 수 있는 통합 허브입니다.
 
 - 🌐 허브 (웹): https://anchirong9-arch.github.io/studio-launcher/
 - 💻 허브 (내 PC): `실행하기.bat` 실행 후 http://127.0.0.1:8770/
 - ⬇ 실행용 ZIP: https://github.com/anchirong9-arch/studio-launcher/releases/latest/download/studio-launcher.zip
 
-## 한 번에 켜지는 서버 3종
+## 한 번에 켜지는 서버 4종
 
 | # | 도구 | 포트 | 주소 | 하는 일 |
 | - | --- | --- | --- | --- |
 | 1 | TTS 스튜디오 | 8765 | http://127.0.0.1:8765/ | 대본 → AI 음성 `.mp3` + 단어 타이밍 `.srt` · 목소리 6종 · 쇼츠 메타 프리셋 12종 |
 | 2 | 쇼츠 메이커 | 8766 | http://127.0.0.1:8766/ | 짤 + 음성 + 자막 → 1080×1920 `.mp4` |
 | 3 | 쿠파스 헌터 | 8767 | http://127.0.0.1:8767/ | 쿠팡 가성비 상품 + 4채널 단축 링크 |
-| – | 통합 허브 | 8770 | http://127.0.0.1:8770/ | 세 서버 상태 확인 · 바로가기 · 키 등록 |
+| 4 | 영상 컷 편집기 | 8768 | http://127.0.0.1:8768/ | 영상 최대 5개 구간 자르기 · 순서대로 1개 MP4 합치기 |
+| – | 통합 허브 | 8770 | http://127.0.0.1:8770/ | 네 서버 상태 확인 · 바로가기 · 키 등록 |
 
-## 바로 쓰는 웹 도구 5종
+## 바로 쓰는 웹 도구 6종
 
 | # | 도구 | 주소 |
 | - | --- | --- |
-| 4 | 짤 썸네일 스튜디오 | https://anchirong9-arch.github.io/meme-thumb-studio/ |
-| 5 | 후킹 제목 생성기 | https://anchirong9-arch.github.io/hook-title-gen/ |
-| 6 | 백수톡 게임즈 | https://anchirong9-arch.github.io/baeksutalk-games/ |
-| 7 | 칼바람 추첨기 | https://anchirong9-arch.github.io/lol-aram-picker/ |
-| 8 | shop-links | https://anchirong9-arch.github.io/shop-links/ |
+| 5 | 짤 썸네일 스튜디오 | https://anchirong9-arch.github.io/meme-thumb-studio/ |
+| 6 | 후킹 제목 생성기 | https://anchirong9-arch.github.io/hook-title-gen/ |
+| 7 | 백수톡 게임즈 | https://anchirong9-arch.github.io/baeksutalk-games/ |
+| 8 | 칼바람 추첨기 | https://anchirong9-arch.github.io/lol-aram-picker/ |
+| 9 | 다중 영상 컷 편집기 | https://anchirong9-arch.github.io/video-cutter/ |
+| 10 | shop-links | https://anchirong9-arch.github.io/shop-links/ |
 
 ## 처음 한 번
 
 1. [ZIP](https://github.com/anchirong9-arch/studio-launcher/releases/latest/download/studio-launcher.zip)을 받아 `C:\studio-launcher` 처럼 **짧은 영문 경로**에 풉니다.
 2. `실행하기.bat` 을 더블클릭합니다. (파일명이 깨져 보이면 `run.bat`)
    - 처음 한 번만 `.venv` 를 만들고 `edge-tts · gTTS · imageio-ffmpeg · Pillow` 를 설치합니다. 1~3분.
-   - 끝나면 브라우저가 http://127.0.0.1:8770/ 을 열고, 세 서버가 같이 켜져 있습니다.
+   - 끝나면 브라우저가 http://127.0.0.1:8770/ 을 열고, 네 서버가 같이 켜져 있습니다.
 3. 허브의 **🔑 쿠팡 파트너스 키** 칸에 Access/Secret Key를 넣습니다. 처음 한 번만.
    - 키는 `tools\coupas-hunter\coupas-api-key.env` 에만 저장되고 저장소에는 올라가지 않습니다.
 
@@ -39,7 +41,7 @@ Windows에서 "PC를 보호했습니다" 경고가 뜨면 **추가 정보 → �
 
 ## 끄기 / 다시 켜기
 
-- `종료하기.bat` (또는 `stop.bat`): 이 런처가 켠 서버 3개와 허브를 정리합니다.
+- `종료하기.bat` (또는 `stop.bat`): 이 런처가 켠 서버 4개와 허브를 정리합니다.
 - `실행하기.bat` 창을 닫거나 `Ctrl+C` 를 눌러도 같이 정리됩니다.
 - 이미 켜져 있는 서버는 런처가 **그대로 다시 씁니다**. 중복으로 켜지 않습니다.
 - 포트가 다른 프로그램에 잡혀 있으면 허브 카드에 `충돌` 로 표시되고 사유가 나옵니다.
@@ -49,14 +51,15 @@ Windows에서 "PC를 보호했습니다" 경고가 뜨면 **추가 정보 → �
 ```
 studio-launcher/
 ├─ index.html · style.css · app.js   # 통합 허브 (GitHub Pages 와 로컬 8770 에서 같은 파일)
-├─ launcher.py                       # 서버 3개 관리 + 허브 서버 (표준 라이브러리만)
+├─ launcher.py                       # 서버 4개 관리 + 허브 서버 (표준 라이브러리만)
 ├─ 실행하기.bat / run.bat            # 1클릭 실행
 ├─ 종료하기.bat / stop.bat           # 정리
 ├─ requirements.txt                  # edge-tts · gTTS · imageio-ffmpeg · Pillow
 └─ tools/
    ├─ tts-studio/                    # 8765
    ├─ shorts-maker/                  # 8766
-   └─ coupas-hunter/                 # 8767
+   ├─ coupas-hunter/                 # 8767
+   └─ video-cutter/                  # 8768 (server.py + 같은 웹 화면)
 ```
 
 `logs/` 에 각 도구의 실행 로그가 쌓입니다 (`tts-studio.log` 등). 문제가 생기면 이 파일을 보면 됩니다.

@@ -7,6 +7,7 @@
     { id: 'tts-studio',    port: 8765 },
     { id: 'shorts-maker',  port: 8766 },
     { id: 'coupas-hunter', port: 8767 },
+    { id: 'video-cutter',  port: 8768 },
   ];
   const HUB_PORT = 8770;
   const HUB_BASE = location.port === String(HUB_PORT) ? '' : `http://127.0.0.1:${HUB_PORT}`;
@@ -82,6 +83,10 @@
     if (id === 'coupas-hunter') {
       return h.keySet ? `쿠팡 키 등록됨 · ${h.keyHint || ''}` : '쿠팡 파트너스 키 등록 필요';
     }
+    if (id === 'video-cutter') {
+      return h.ffmpegReady ? `ffmpeg ${h.ffmpeg} · 최대 ${h.maxClips || 5}개`
+                           : 'ffmpeg 준비 안 됨 — 실행하기.bat 을 다시 실행해 주세요';
+    }
     return '';
   }
 
@@ -128,8 +133,8 @@
   function renderSummary(results, hubTools) {
     const online = results.filter(r => r.online).length;
     const sum = $('#sum');
-    sum.className = 'sum ' + (online === 3 ? 'on' : online > 0 ? 'wait' : 'off');
-    $('#sum b').textContent = online === 0 ? '서버 꺼짐' : `${online}/3 온라인`;
+    sum.className = 'sum ' + (online === SERVERS.length ? 'on' : online > 0 ? 'wait' : 'off');
+    $('#sum b').textContent = online === 0 ? '서버 꺼짐' : `${online}/${SERVERS.length} 온라인`;
 
     $('#offlineBanner').hidden = online > 0;
     const stopBtn = $('#stopAll');

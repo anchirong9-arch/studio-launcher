@@ -18,3 +18,6 @@ tools/shorts-maker/dev_test/
 .DS_Store
 Thumbs.db
 logs-run.out
+
+# 영상 컷 편집기 작업 폴더(업로드·결과물)
+tools/video-cutter/jobs/

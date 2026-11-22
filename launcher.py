@@ -3,12 +3,13 @@
 """
 통합 스튜디오 런처 (studio-launcher)
 -----------------------------------
-`tools/` 안의 세 로컬 서버를 한 번에 켜고, 통합 허브를 브라우저로 열어 줍니다.
+`tools/` 안의 네 로컬 서버를 한 번에 켜고, 통합 허브를 브라우저로 열어 줍니다.
 
     tts-studio      http://127.0.0.1:8765   대본 -> AI 음성(.mp3) + 자막(.srt)
     shorts-maker    http://127.0.0.1:8766   짤 + 음성 + 자막 -> 9:16 mp4
     coupas-hunter   http://127.0.0.1:8767   쿠팡 가성비 상품 + 4채널 링크
-    허브(이 파일)    http://127.0.0.1:8770   세 서버 상태 확인 + 바로가기
+    video-cutter    http://127.0.0.1:8768   영상 최대 5개 구간 자르기 + 합치기
+    허브(이 파일)    http://127.0.0.1:8770   네 서버 상태 확인 + 바로가기
 
 동작 방식
   * 이미 켜져 있는 서버는 그대로 씁니다. (같은 서버를 두 번 켜지 않음)
@@ -17,7 +18,7 @@
   * 이 창을 닫거나 Ctrl+C 를 누르면 같이 켠 서버도 정리합니다.
 
 실행
-  python launcher.py               서버 3개 + 허브를 켜고 브라우저를 엽니다
+  python launcher.py               서버 4개 + 허브를 켜고 브라우저를 엽니다
   python launcher.py --no-open     브라우저는 열지 않습니다
   python launcher.py --stop        이 런처가 켠 서버와 허브를 끕니다
 
@@ -52,7 +53,7 @@ SERVER_VERSION = "1.0.0"
 HEALTH_TIMEOUT = 1.2
 START_WAIT = 25.0
 
-# 서버 3종 정의 — 포트와 브라우저 자동 열기 끄기 옵션은 각 도구 사양 그대로
+# 서버 4종 정의 — 포트와 브라우저 자동 열기 끄기 옵션은 각 도구 사양 그대로
 TOOLS = [
     {
         "id": "tts-studio",
@@ -77,6 +78,14 @@ TOOLS = [
         "args": ["--no-browser"],
         "modules": [],
         "hint": "",
+    },
+    {
+        "id": "video-cutter",
+        "name": "영상 컷 편집기",
+        "port": 8768,
+        "args": ["--no-open"],
+        "modules": ["imageio_ffmpeg"],
+        "hint": "imageio-ffmpeg",
     },
 ]
 TOOL_BY_ID = {t["id"]: t for t in TOOLS}
@@ -317,6 +326,9 @@ def tool_status(tool: dict) -> dict:
                 detail = "쿠팡 키 등록됨 · %s" % (data.get("keyHint") or "")
             else:
                 detail = "쿠팡 파트너스 키 등록 필요"
+        elif tid == "video-cutter":
+            detail = ("ffmpeg %s · 최대 %d개" % (data.get("ffmpeg"), data.get("maxClips") or 5)) \
+                if data.get("ffmpegReady") else "ffmpeg 준비 안 됨 — 실행하기.bat 을 다시 실행해 주세요"
     return {
         "id": tid,
         "name": tool["name"],
@@ -541,7 +553,7 @@ def stop_everything() -> int:
 def print_banner() -> None:
     print("", flush=True)
     print("=" * 62, flush=True)
-    print("   통합 스튜디오 런처 v%s — TTS · 쇼츠 · 쿠파스 한 번에" % SERVER_VERSION, flush=True)
+    print("   통합 스튜디오 런처 v%s — TTS · 쇼츠 · 쿠파스 · 컷편집 한 번에" % SERVER_VERSION, flush=True)
     print("=" * 62, flush=True)
 
 
@@ -615,7 +627,7 @@ def main(argv=None) -> int:
         for tool in TOOLS:
             _STATE["tools"][tool["id"]] = {"pid": None, "owned": False, "note": "", "error": ""}
 
-    log("서버 3종을 확인합니다... (이미 켜져 있으면 그대로 씁니다)")
+    log("서버 4종을 확인합니다... (이미 켜져 있으면 그대로 씁니다)")
     for tool in TOOLS:
         spawn_tool(tool)
 

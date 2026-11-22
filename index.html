@@ -7,10 +7,10 @@
 <title>통합 스튜디오 — TTS · 쇼츠 · 쿠파스</title>
 <meta name="description" content="TTS 스튜디오·쇼츠 메이커·쿠파스 헌터를 실행하기.bat 한 번으로 같이 켜고, 웹 도구는 바로 여는 통합 런처">
 <meta property="og:title" content="통합 스튜디오 — 한 번 켜면, 다 켜진다">
-<meta property="og:description" content="PC 서버 3종 상태 확인 + 원클릭 이동 · 웹 도구 5종 · 런처 ZIP 다운로드">
+<meta property="og:description" content="PC 서버 4종 상태 확인 + 원클릭 이동 · 웹 도구 5종 · 런처 ZIP 다운로드">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0f13'/%3E%3Cpath d='M9 21.5 16 8l7 13.5' stroke='%23ff4d6d' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='24' r='2.4' fill='%236c8cff'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -35,9 +35,9 @@
   <!-- ── 히어로 ── -->
   <section class="hero">
     <p class="kicker">STUDIO LAUNCHER</p>
-    <h1>세 개 서버, <em>한 번에</em></h1>
+    <h1>네 개 서버, <em>한 번에</em></h1>
     <p class="lede">
-      <b>TTS 스튜디오</b> · <b>쇼츠 메이커</b> · <b>쿠파스 헌터</b>를 <code>실행하기.bat</code> 하나로 같이 켜고,
+      <b>TTS 스튜디오</b> · <b>쇼츠 메이커</b> · <b>쿠파스 헌터</b> · <b>영상 컷 편집기</b>를 <code>실행하기.bat</code> 하나로 같이 켜고,
       웹 도구들은 여기서 바로 열어요.
     </p>
     <div class="hero-actions">
@@ -53,8 +53,8 @@
   <!-- ── 서버가 하나도 안 켜져 있을 때 ── -->
   <section class="banner" id="offlineBanner" hidden>
     <div class="banner-txt">
-      <b>지금 이 브라우저에서는 PC 서버 3개가 응답하지 않아요.</b>
-      <span>내 PC에서 ZIP을 받아 <code>실행하기.bat</code>을 더블클릭하면 3개가 한 번에 켜집니다. 이 페이지는 10초마다 다시 확인해요.</span>
+      <b>지금 이 브라우저에서는 PC 서버 4개가 응답하지 않아요.</b>
+      <span>내 PC에서 ZIP을 받아 <code>실행하기.bat</code>을 더블클릭하면 4개가 한 번에 켜집니다. 이 페이지는 10초마다 다시 확인해요.</span>
     </div>
     <a class="btn sm primary" href="https://github.com/anchirong9-arch/studio-launcher/releases/latest/download/studio-launcher.zip">ZIP 받기</a>
   </section>
@@ -62,7 +62,7 @@
   <!-- ── ① PC 서버 ── -->
   <section class="block">
     <div class="block-head">
-      <h2>① PC에서 켜는 서버 <span class="cnt">3</span></h2>
+      <h2>① PC에서 켜는 서버 <span class="cnt">4</span></h2>
       <p class="block-sub">초록불이면 그 도구가 지금 이 PC에서 돌고 있다는 뜻이에요. 이 페이지를 연 브라우저가 내 PC 서버에 직접 물어본 결과라서, 휴대폰에서 열면 늘 꺼짐으로 보입니다.</p>
     </div>
 
@@ -119,6 +119,24 @@
         </div>
       </article>
 
+      <article class="card srv" data-tool="video-cutter" data-port="8768">
+        <div class="ch">
+          <span class="num">4</span>
+          <div class="ct">
+            <b>영상 컷 편집기</b>
+            <span class="meta">8768 · 최대 5개 자르기·합치기</span>
+          </div>
+          <span class="pill wait" data-pill><i></i><span>확인 중</span></span>
+        </div>
+        <p class="cd">영상 <b>최대 5개</b>를 넣어 구간만 자르고, 순서대로 <b>한 개의 MP4</b>로 합쳐요. 넣은 파일은 <b>이 PC 안에서만</b> 처리해요.</p>
+        <p class="cdetail" data-detail>포트 8768 · 127.0.0.1</p>
+        <div class="ca">
+          <a class="btn sm primary" data-open href="http://127.0.0.1:8768/" target="_blank" rel="noopener">열기</a>
+          <a class="btn sm ghost" href="https://anchirong9-arch.github.io/video-cutter/" target="_blank" rel="noopener">웹 버전</a>
+          <button class="btn sm ghost" data-start type="button" hidden>다시 켜기</button>
+        </div>
+      </article>
+
     </div>
 
     <div class="under-grid">
@@ -165,7 +183,7 @@
   <!-- ── ② 웹 도구 ── -->
   <section class="block">
     <div class="block-head">
-      <h2>② 웹에서 바로 쓰는 도구 <span class="cnt">5</span></h2>
+      <h2>② 웹에서 바로 쓰는 도구 <span class="cnt">6</span></h2>
       <p class="block-sub">설치도 실행도 없이 눌러서 바로. 휴대폰에서도 열려요.</p>
     </div>
 
@@ -173,7 +191,7 @@
 
       <a class="card web" href="https://anchirong9-arch.github.io/meme-thumb-studio/" target="_blank" rel="noopener">
         <div class="ch">
-          <span class="num">4</span>
+          <span class="num">5</span>
           <div class="ct">
             <b>짤 썸네일 스튜디오</b>
             <span class="meta">문구 띠 · 상품 후기 카드</span>
@@ -185,7 +203,7 @@
 
       <a class="card web" href="https://anchirong9-arch.github.io/hook-title-gen/" target="_blank" rel="noopener">
         <div class="ch">
-          <span class="num">5</span>
+          <span class="num">6</span>
           <div class="ct">
             <b>후킹 제목 생성기</b>
             <span class="meta">제목 · 캡션 · 해시태그</span>
@@ -198,7 +216,7 @@
 
       <a class="card web" href="https://anchirong9-arch.github.io/baeksutalk-games/" target="_blank" rel="noopener">
         <div class="ch">
-          <span class="num">6</span>
+          <span class="num">7</span>
           <div class="ct">
             <b>백수톡 게임즈</b>
             <span class="meta">룰렛 · 사다리 · 반응속도</span>
@@ -210,7 +228,7 @@
 
       <a class="card web" href="https://anchirong9-arch.github.io/lol-aram-picker/" target="_blank" rel="noopener">
         <div class="ch">
-          <span class="num">7</span>
+          <span class="num">8</span>
           <div class="ct">
             <b>칼바람 추첨기</b>
             <span class="meta">챔피언 랜덤 픽</span>
@@ -220,9 +238,22 @@
         <p class="cd">칼바람 나락 챔피언을 랜덤으로 뽑아 주는 추첨기.</p>
       </a>
 
+      <a class="card web" href="https://anchirong9-arch.github.io/video-cutter/" target="_blank" rel="noopener">
+        <div class="ch">
+          <span class="num">9</span>
+          <div class="ct">
+            <b>다중 영상 컷 편집기</b>
+            <span class="meta">웹 · 최대 5개 자르기</span>
+          </div>
+          <span class="go" aria-hidden="true">↗</span>
+        </div>
+        <p class="cd">영상 최대 5개를 넣어 구간만 잘라 저장하거나 한 개로 합치기. PC 런처가 켜져 있으면 MP4로 정확하게.</p>
+        <span class="tag new">NEW</span>
+      </a>
+
       <a class="card web" href="https://anchirong9-arch.github.io/shop-links/" target="_blank" rel="noopener">
         <div class="ch">
-          <span class="num">8</span>
+          <span class="num">10</span>
           <div class="ct">
             <b>shop-links</b>
             <span class="meta">프로필 링크 · 상품 모음</span>
@@ -253,7 +284,7 @@
         <span class="step-no">2</span>
         <div>
           <b><code>실행하기.bat</code> 더블클릭</b>
-          <p>처음 한 번은 파이썬 패키지를 설치하느라 1~3분 걸려요. 끝나면 이 페이지가 열리고 세 서버가 같이 켜져요.</p>
+          <p>처음 한 번은 파이썬 패키지를 설치하느라 1~3분 걸려요. 끝나면 이 페이지가 열리고 네 서버가 같이 켜져요.</p>
         </div>
       </li>
       <li>
@@ -275,7 +306,7 @@
         <p><code>실행하기.bat</code> 창이 닫혔는지 확인해 주세요. 창을 닫으면 서버도 꺼집니다. 다시 켜면 이 페이지가 10초 안에 초록불로 바뀌어요. 브라우저가 로컬 접속을 막는 설정(일부 사파리·회사 프록시)이면 서버가 켜져 있어도 꺼짐으로 보일 수 있으니, 그때는 카드의 <b>열기</b>로 직접 들어가 보세요.</p>
       </details>
       <details>
-        <summary>포트 8765·8766·8767이 이미 쓰인다고 나와요</summary>
+        <summary>포트 8765~8768이 이미 쓰인다고 나와요</summary>
         <p>예전에 켠 서버가 남아 있는 경우예요. <code>종료하기.bat</code>을 더블클릭하거나, 작업 관리자에서 <code>python</code> 프로세스를 끝낸 뒤 다시 실행해 주세요. 이미 켜져 있는 서버는 런처가 그대로 다시 씁니다.</p>
       </details>
       <details>
@@ -302,6 +333,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

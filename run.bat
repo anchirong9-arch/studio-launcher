@@ -3,11 +3,11 @@ rem English-named launcher, same as 실행하기.bat in case the Korean filename
 chcp 65001 >nul 2>nul
 setlocal
 cd /d "%~dp0"
-title Studio Launcher - TTS / Shorts / Coupas
+title Studio Launcher - TTS / Shorts / Coupas / Video Cut
 color 0B
 
 echo ==========================================================
-echo    Studio Launcher  -  TTS / Shorts / Coupas
+echo    Studio Launcher  -  TTS / Shorts / Coupas / Video Cut
 echo ==========================================================
 echo.
 
@@ -57,7 +57,7 @@ echo        Coupas Hunter still works. TTS and Shorts will continue installing n
 echo.
 
 :run_launcher
-echo [3/3] Starting the 3 servers and opening the browser.
+echo [3/3] Starting the 4 servers and opening the browser.
 echo.
 echo    * Closing this window stops the servers.
 echo    * Hub: http://127.0.0.1:8770
