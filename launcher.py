@@ -90,7 +90,7 @@ def _load_version() -> str:
             return str(data["version"])
     except Exception:  # noqa: BLE001
         pass
-    return "1.0.1"
+    return "1.0.2"
 
 
 SERVER_VERSION = _load_version()
