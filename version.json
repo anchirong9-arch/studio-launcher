@@ -1,14 +1,14 @@
 {
-  "version": "1.0.2",
-  "released": "2026-11-24",
+  "version": "1.1.0",
+  "released": "2026-11-25",
   "name": "백수톡 스튜디오",
   "zip": "https://github.com/anchirong9-arch/studio-launcher/archive/refs/heads/main.zip",
   "zip_fallback": "https://github.com/anchirong9-arch/studio-launcher/releases/latest/download/studio-launcher.zip",
   "version_url": "https://anchirong9-arch.github.io/studio-launcher/version.json",
   "notes": [
-    "허브 ② 웹 도구에 '1:1 블러 카드'(11) · '무료 브금 박스'(12) 추가 — 웹 도구 8종",
-    "1:1 블러 카드: 사진 → 1080×1080 블러 배경 + 썸네일·코멘트·다크 아웃트로 카드, PNG/ZIP",
-    "무료 브금 박스: CC0 브금 20곡 + 합성 효과음 89종, MP3/WAV/ZIP · 영상 소리 추출",
-    "두 도구 모두 설치·로그인 없이 브라우저에서만 처리(사진·음원 서버 전송 없음)"
+    "② 웹 도구: '짤 썸네일 스튜디오' 빼고 '사진 편집기'(photo-editor) 추가 — 웹 도구 8종 그대로",
+    "사진 편집기: 보정·자르기·문구·모자이크·내보내기 (https://anchirong9-arch.github.io/photo-editor/)",
+    "허브에 링크 사진 API 추가 — POST /api/extract-media (인스타·쓰레드 게시물 → 원본 사진 data URL)",
+    "캐러셀은 원본 크기로 전체 장수, GET /api/health, CORS·프라이빗 네트워크 프리플라이트(204) 허용"
   ]
 }

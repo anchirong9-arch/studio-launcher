@@ -2,6 +2,7 @@
 
 로컬 서버가 필요한 도구 4종을 **한 번에 켜고**, 웹 도구 8종과 크리에이터 툴킷 7종을 바로 여는 통합 런처입니다.
 이제 **까만 콘솔 창 없이** 앱 창으로 열리고, 실행할 때마다 **GitHub에서 새 버전을 자동으로 받아** 갱신합니다.
+**사진 편집기에서 인스타그램·쓰레드 게시물 링크의 원본 사진을 바로 불러옵니다** (`/api/extract-media`).
 
 - 🌐 허브 (웹): https://anchirong9-arch.github.io/studio-launcher/
 - 💻 허브 (내 PC): 앱 창 또는 http://127.0.0.1:8770/
@@ -16,13 +17,13 @@
 | 2 | 쇼츠 메이커 | 8766 | http://127.0.0.1:8766/ | 짤 + 음성 + 자막 → 1080×1920 `.mp4` |
 | 3 | 쿠파스 헌터 | 8767 | http://127.0.0.1:8767/ | 쿠팡 가성비 상품 + 4채널 단축 링크 |
 | 4 | 영상 컷 편집기 | 8768 | http://127.0.0.1:8768/ | 영상 최대 5개 구간 자르기 · 순서대로 1개 MP4 합치기 |
-| – | 허브(백수톡 스튜디오) | 8770 | http://127.0.0.1:8770/ | 네 서버 상태 확인 · 바로가기 · 키 등록 · 버전/업데이트 |
+| – | 허브(백수톡 스튜디오) | 8770 | http://127.0.0.1:8770/ | 네 서버 상태 확인 · 바로가기 · 키 등록 · 버전/업데이트 · 링크 사진 불러오기 |
 
 ## 바로 쓰는 웹 도구 8종
 
 | # | 도구 | 주소 |
 | - | --- | --- |
-| 5 | 짤 썸네일 스튜디오 | https://anchirong9-arch.github.io/meme-thumb-studio/ |
+| 5 | 사진 편집기 | https://anchirong9-arch.github.io/photo-editor/ |
 | 6 | 후킹 제목 생성기 | https://anchirong9-arch.github.io/hook-title-gen/ |
 | 7 | 백수톡 게임즈 | https://anchirong9-arch.github.io/baeksutalk-games/ |
 | 8 | 칼바람 추첨기 | https://anchirong9-arch.github.io/lol-aram-picker/ |
@@ -105,8 +106,30 @@ studio-launcher/
 - 업데이트 API: `POST /api/update/check` (확인만) · `POST /api/update/apply` (지금 적용)
 - 서버는 `127.0.0.1` 에만 열립니다. 같은 와이파이의 다른 기기에서는 접속되지 않습니다.
 
+## 사진 편집기(photo-editor) 연동 — 링크에서 원본 사진 불러오기
+
+웹(HTTPS)에 있는 사진 편집기는 인스타그램·쓰레드 페이지를 직접 열 수 없습니다(CORS·로그인).
+그래서 **집 PC의 런처가 대신 링크를 열어** 원본 사진을 받아 넘겨 줍니다. 사진 편집기의 **🔗 링크** 버튼이 이 API 를 부릅니다.
+
+| 요청 | 하는 일 |
+| --- | --- |
+| `GET http://localhost:8770/api/health` | 살아 있으면 `200 {"ok": true}` |
+| `POST http://localhost:8770/api/extract-media` | 본문 `{"url": "<인스타·쓰레드 게시물 링크>"}` → `{"images": [{"dataUrl": "data:image/jpeg;base64,…", "name": "인스타 1"}]}` |
+
+- 캐러셀(여러 장)이면 **원본 크기 그대로 전체 장수**를 옮깁니다. (한 번에 최대 30장)
+- 모든 응답(OPTIONS 프리플라이트 `204` 포함)에 CORS 헤더가 붙습니다:
+  `Access-Control-Allow-Origin: *` · `Access-Control-Allow-Methods: GET, POST, OPTIONS` · `Access-Control-Allow-Headers: Content-Type` · `Access-Control-Allow-Private-Network: true`
+- 사진 주소의 `stp=` 잘린 미리보기 값을 원본 크기(`dst-jpg_e35`)로 바꿔 받습니다.
+- 글만 있는 게시물·비공개 게시물은 사진이 없다고 알려 줍니다(프로필 사진은 사진으로 치지 않습니다).
+- 휴대폰에서 열어도 사진 편집기는 `localhost:8770` 을 찾지 못합니다. 집 PC에서 런처를 켜고 그 PC의 브라우저에서 쓰는 방식입니다.
+
 ## 최근 변경
 
+- **2026-11-25 · v1.1.0 — 사진 편집기 추가 + 인스타·쓰레드 링크 사진 불러오기**
+  - ② 웹 도구에서 `짤 썸네일 스튜디오`(meme-thumb-studio)를 빼고 `사진 편집기`(5)를 넣었습니다. (`1:1 블러 카드`와 기능이 겹쳐서) 웹 도구는 그대로 8종입니다.
+  - `사진 편집기` — https://anchirong9-arch.github.io/photo-editor/ · 보정·자르기·문구·모자이크·내보내기. PC 런처가 켜져 있으면 인스타·쓰레드 링크에서 원본 사진을 바로 불러옵니다.
+  - 허브에 `GET /api/health` 와 `POST /api/extract-media` 를 추가했습니다. 캐러셀은 원본 크기로 전체 장수, CORS·프라이빗 네트워크 프리플라이트까지 허용.
+  - ② 섹션 `NEW` 표시는 새로 넣은 사진 편집기 카드로 옮겼습니다.
 - **2026-11-24 · v1.0.2 — ② 웹 도구에 '1:1 블러 카드' · '무료 브금 박스' 추가 (총 8종)**
   - `1:1 블러 카드`(11): 사진 → 1080×1080 블러 배경 + 썸네일 2줄 문구 · 1줄 코멘트 · 다크 아웃트로 카드, PNG/ZIP 저장. (https://anchirong9-arch.github.io/card-maker/)
   - `무료 브금 박스`(12): CC0 브금 20곡 + 자체 합성 효과음 89종, 검색·미리듣기·MP3/WAV/ZIP · 영상에서 소리만 뽑아 구간 자르기. (https://anchirong9-arch.github.io/shorts-bgm-box/)

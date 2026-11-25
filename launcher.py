@@ -9,7 +9,7 @@
     shorts-maker    http://127.0.0.1:8766   짤 + 음성 + 자막 -> 9:16 mp4
     coupas-hunter   http://127.0.0.1:8767   쿠팡 가성비 상품 + 4채널 링크
     video-cutter    http://127.0.0.1:8768   영상 최대 5개 구간 자르기 + 합치기
-    허브(이 파일)    http://127.0.0.1:8770   네 서버 상태 확인 + 바로가기
+    허브(이 파일)    http://127.0.0.1:8770   네 서버 상태 확인 + 바로가기 + 링크 사진 불러오기
 
 동작 방식
   * 이미 켜져 있는 서버는 그대로 씁니다. (같은 서버를 두 번 켜지 않음)
@@ -34,6 +34,7 @@ Python 3.9 이상, 표준 라이브러리만 사용합니다. (도구별 패키�
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -46,9 +47,11 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import webbrowser
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -90,7 +93,7 @@ def _load_version() -> str:
             return str(data["version"])
     except Exception:  # noqa: BLE001
         pass
-    return "1.0.2"
+    return "1.1.0"
 
 
 SERVER_VERSION = _load_version()
@@ -541,6 +544,391 @@ def auto_update_at_start() -> None:
             % (exc, SERVER_VERSION))
 
 
+# ───────────────── 인스타 · 쓰레드 게시물 사진 불러오기 (photo-editor 연동) ─────────────────
+#
+# 웹(HTTPS)에 있는 사진 편집기(photo-editor)는 인스타그램·쓰레드 페이지를 직접 열 수 없습니다.
+# (CORS 로 막히고, 로그인도 필요합니다) 그래서 집 PC의 이 런처가 대신 링크를 열어
+# 원본 사진을 받아 data URL 로 넘겨 줍니다.
+#
+#   GET  /api/health          -> 200 {"ok": true}
+#   POST /api/extract-media   {"url": "<게시물 링크>"}
+#        -> {"images": [{"dataUrl": "data:image/jpeg;base64,...", "name": "인스타 1"}]}
+
+MEDIA_PAGE_TIMEOUT = 7.0        # 게시물 페이지 한 장
+MEDIA_IMAGE_TIMEOUT = 10.0      # 사진 한 장
+MEDIA_DEADLINE = 10.0           # 사진 묶음 전체 (사진 편집기가 12초에 끊습니다)
+MEDIA_WORKERS = 6               # 사진은 여러 장을 동시에 받습니다
+MEDIA_MAX_IMAGES = 30           # 한 게시물에서 넘기는 사진 상한
+MEDIA_MAX_IMAGE_BYTES = 6 << 20   # 사진 한 장 상한
+MEDIA_MAX_TOTAL_BYTES = 24 << 20  # 한 번에 넘기는 원본 합계 상한
+MEDIA_FETCH_ALL_TIMEOUT = 25.0    # 위 상한이 있어도 이 시간을 넘기지 않습니다
+
+# 인스타그램·쓰레드는 그냥 열면 앱 껍데기만 주고, 크롤러로 열면 내용이 든 HTML 을 줍니다.
+MEDIA_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+MEDIA_UA_FALLBACKS = (
+    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+)
+
+_JSON_SCRIPT_RE = re.compile(r'<script type="application/json"[^>]*>(.*?)</script>', re.S)
+_OG_IMAGE_RE = re.compile(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', re.I)
+_EMBED_IMAGE_RE = re.compile(r'<img[^>]+class="EmbeddedMediaImage"[^>]+src="([^"]+)"', re.I)
+_IMG_SRC_RE = re.compile(r'<img[^>]+src="(https://[^"]+?\.(?:jpg|jpeg|png|webp))[^"]*"', re.I)
+
+
+def _sns_parse_url(url: str) -> dict:
+    """인스타그램·쓰레드 게시물 링크 → 플랫폼 · 게시물 코드 · 정규 주소."""
+    raw = str(url or "").strip()
+    if not raw:
+        return {"ok": False, "error": "게시물 링크를 넣어 주세요."}
+    if not re.match(r"^https?://", raw, re.I):
+        return {"ok": False, "error": "http 로 시작하는 링크를 넣어 주세요."}
+    try:
+        parts = urllib.parse.urlsplit(raw)
+        host = (parts.hostname or "").lower()
+    except Exception:  # noqa: BLE001
+        return {"ok": False, "error": "링크를 읽지 못했어요."}
+    path = urllib.parse.unquote(parts.path or "/")
+
+    if host.endswith("instagram.com"):
+        m = re.search(r"/(p|reels|reel|tv)/([A-Za-z0-9_-]{5,})", path)
+        if not m:
+            return {"ok": False, "error": "인스타그램 게시물 링크가 아니에요. (/p/… · /reel/…)"}
+        kind = "reel" if m.group(1).startswith("reel") else m.group(1)
+        code = m.group(2)
+        return {"ok": True, "platform": "instagram", "code": code,
+                "url": "https://www.instagram.com/%s/%s/" % (kind, code)}
+
+    if host.endswith("threads.net") or host.endswith("threads.com"):
+        m = re.search(r"/@[^/]+/post/([A-Za-z0-9_-]{5,})", path)
+        if m:
+            code = m.group(1)
+            return {"ok": True, "platform": "threads", "code": code,
+                    "url": "https://www.threads.com/@%s/post/%s" % (m.group(0).split("/")[1][1:], code)}
+        m = re.search(r"/t/([A-Za-z0-9_-]{5,})", path)
+        if m:
+            code = m.group(1)
+            return {"ok": True, "platform": "threads", "code": code,
+                    "url": "https://www.threads.com/t/%s" % code}
+        m = re.search(r"/share/([A-Za-z0-9_-]{5,})", path)
+        if m:
+            # 짧은 공유 링크는 302 로 게시물 주소를 알려 줍니다.
+            return {"ok": True, "platform": "threads", "code": "", "share": raw, "url": raw}
+        return {"ok": False, "error": "쓰레드 게시물 링크가 아니에요. (/@아이디/post/…)"}
+
+    return {"ok": False, "error": "인스타그램·쓰레드 게시물 링크만 지원합니다."}
+
+
+def _media_get(url: str, timeout: float, ua: str = MEDIA_UA, referer: str = ""):
+    headers = {
+        "User-Agent": ua,
+        "Accept": "text/html,application/xhtml+xml,image/avif,image/webp,image/*,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+    }
+    if referer:
+        headers["Referer"] = referer
+    req = urllib.request.Request(url, headers=headers)
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+def _media_html(url: str) -> tuple:
+    """게시물 페이지를 엽니다. 크롤러 UA → 대체 UA 순서로 시도합니다. (최종 주소, HTML)"""
+    last = None
+    for ua in (MEDIA_UA,) + MEDIA_UA_FALLBACKS:
+        try:
+            with _media_get(url, MEDIA_PAGE_TIMEOUT, ua) as res:
+                html = res.read().decode("utf-8", "replace")
+                final = res.geturl() or url
+            if html and len(html) > 2000:
+                return final, html
+            last = "빈 응답"
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+    raise RuntimeError(last or "응답 없음")
+
+
+def _json_blocks(html: str) -> list:
+    """페이지 안의 <script type="application/json"> 블록을 모두 꺼냅니다."""
+    blocks = []
+    for m in _JSON_SCRIPT_RE.finditer(html):
+        text = m.group(1).strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            blocks.append(json.loads(text))
+        except Exception:  # noqa: BLE001
+            continue
+    return blocks
+
+
+def _walk_dicts(obj, keys, depth: int = 0):
+    """keys 중 하나를 가진 dict 를 깊이 순서대로 찾습니다."""
+    if depth > 14:
+        return
+    if isinstance(obj, dict):
+        if any(k in obj for k in keys):
+            yield obj
+        for value in obj.values():
+            yield from _walk_dicts(value, keys, depth + 1)
+    elif isinstance(obj, list):
+        for value in obj[:80]:
+            yield from _walk_dicts(value, keys, depth + 1)
+
+
+def _upgrade_image_url(url: str) -> str:
+    """잘린 미리보기 주소를 원본 크기 주소로 바꿉니다. (stp=c…_s640x640 → 원본)"""
+    if not url:
+        return url
+    url = url.replace("\\/", "/").replace("&amp;", "&")
+    if "stp=" in url and re.search(r"stp=[^&]*(?:_s\d+x\d+|c\d+\.\d+\.\d+\.\d+a)", url):
+        url = re.sub(r"stp=[^&]*", "stp=dst-jpg_e35_tt6", url, count=1)
+    return url
+
+
+def _best_image(media: dict) -> tuple:
+    """미디어 하나에서 가장 큰 사진 주소와 크기. (url, width, height)"""
+    versions = media.get("image_versions2") or {}
+    cands = [c for c in (versions.get("candidates") or []) if isinstance(c, dict) and c.get("url")]
+    if cands and any(c.get("width") for c in cands):
+        best = max(cands, key=lambda c: c.get("width") or 0)
+    elif cands:
+        best = cands[0]          # 인스타그램은 큰 것부터 들어 있습니다
+    else:
+        lone = media.get("display_uri") or media.get("display_url") or media.get("thumbnail_src")
+        if not lone:
+            return "", 0, 0
+        return (_upgrade_image_url(lone),
+                int(media.get("original_width") or 0), int(media.get("original_height") or 0))
+    width = int(best.get("width") or media.get("original_width") or 0)
+    height = int(best.get("height") or media.get("original_height") or 0)
+    return _upgrade_image_url(best["url"]), width, height
+
+
+def _media_items(media: dict) -> list:
+    """게시물 미디어 객체 → 사진 목록. 캐러셀이면 전체 장수."""
+    if not isinstance(media, dict) or not media:
+        return []
+    children = media.get("carousel_media")
+    group = [c for c in children if isinstance(c, dict)] if isinstance(children, list) and children else [media]
+    items = []
+    for child in group:
+        url, width, height = _best_image(child)
+        if not url:
+            continue
+        items.append({
+            "url": url,
+            "width": width,
+            "height": height,
+            "video": child.get("media_type") == 2 or bool(child.get("video_versions")),
+        })
+    return items
+
+
+def _pick_media_object(blocks: list, code: str):
+    """페이지 JSON 에서 이 게시물의 미디어 객체를 고릅니다. (다른 게시물 사진을 섞지 않도록)"""
+    loose = None                     # 코드를 모를 때(짧은 공유 링크) 쓰는 후보
+    for block in blocks:
+        for obj in _walk_dicts(block, ("xig_polaris_media",)):
+            media = obj.get("xig_polaris_media")
+            if isinstance(media, dict):
+                media = media.get("if_not_gated_logged_out") or media
+            if not isinstance(media, dict):
+                continue
+            if not (media.get("image_versions2") or media.get("carousel_media")):
+                continue
+            media_code = str(media.get("code") or "")
+            if code and media_code == code:
+                return media
+            if not code:
+                loose = loose or media
+    if loose and not code:
+        return loose
+    for block in blocks:
+        for obj in _walk_dicts(block, ("image_versions2", "carousel_media")):
+            if not (obj.get("image_versions2") or obj.get("carousel_media")):
+                continue
+            obj_code = str(obj.get("code") or "")
+            if code and obj_code == code:
+                return obj
+            if not code and obj_code:
+                loose = loose or obj
+    return loose if not code else None
+
+
+def _profile_pic_urls(blocks: list) -> set:
+    """페이지 안의 프로필 사진 주소 — 글만 있는 게시물에서 이걸 사진으로 착각하지 않도록."""
+    found = set()
+    for block in blocks:
+        for obj in _walk_dicts(block, ("profile_pic_url", "profile_pic_url_hd")):
+            for key in ("profile_pic_url", "profile_pic_url_hd"):
+                value = obj.get(key)
+                if isinstance(value, str) and value.startswith("http"):
+                    found.add(_upgrade_image_url(value))
+                    found.add(value.replace("\\/", "/"))
+    return found
+
+
+def _fallback_items(html: str) -> list:
+    """페이지 JSON 을 못 읽었을 때 — 임베드 이미지 · og:image 한 장이라도."""
+    found = []
+    for pattern in (_EMBED_IMAGE_RE, _OG_IMAGE_RE):
+        for match in pattern.finditer(html):
+            url = _upgrade_image_url(match.group(1))
+            if url and url not in found:
+                found.append(url)
+        if found:
+            break
+    if not found:
+        for match in _IMG_SRC_RE.finditer(html):
+            url = _upgrade_image_url(match.group(1))
+            if "scontent" in url and "s150x150" not in url and url not in found:
+                found.append(url)
+    return [{"url": u, "width": 0, "height": 0, "video": False} for u in found]
+
+
+def _is_profile_pic(url: str) -> bool:
+    """주소가 프로필 사진(og:image 로만 보이는)인가?"""
+    if not url:
+        return False
+    try:
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+        for key in ("efg", "stp"):
+            for value in query.get(key) or []:
+                if "profile_pic" in urllib.parse.unquote(value):
+                    return True
+                try:
+                    pad = value + "=" * (-len(value) % 4)
+                    if "profile_pic" in base64.b64decode(pad).decode("utf-8", "replace"):
+                        return True
+                except Exception:  # noqa: BLE001
+                    pass
+    except Exception:  # noqa: BLE001
+        pass
+    return "profile_pic" in url
+
+
+def _sniff_mime(data: bytes) -> str:
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return "image/jpeg"
+
+
+def _download_images(items: list, referer: str) -> list:
+    """사진들을 동시에 받아 옵니다. 순서는 그대로 유지합니다."""
+    deadline = time.time() + min(MEDIA_DEADLINE, MEDIA_FETCH_ALL_TIMEOUT)
+
+    def fetch(pair):
+        index, item = pair
+        left = deadline - time.time()
+        if left <= 0.5:
+            return index, b""
+        try:
+            timeout = max(1.0, min(MEDIA_IMAGE_TIMEOUT, left))
+            with _media_get(item["url"], timeout, MEDIA_UA, referer) as res:
+                data = res.read(MEDIA_MAX_IMAGE_BYTES + 1)
+            if not data or len(data) > MEDIA_MAX_IMAGE_BYTES:
+                return index, b""
+            if len(data) < 512:          # 오류 페이지·빈 파일
+                return index, b""
+            return index, data
+        except Exception:  # noqa: BLE001
+            return index, b""
+
+    pairs = list(enumerate(items))[:MEDIA_MAX_IMAGES]
+    if not pairs:
+        return []
+    with ThreadPoolExecutor(max_workers=MEDIA_WORKERS) as pool:
+        results = list(pool.map(fetch, pairs))
+
+    out = []
+    total = 0
+    for index, data in sorted(results, key=lambda r: r[0]):
+        if not data:
+            continue
+        if total + len(data) > MEDIA_MAX_TOTAL_BYTES:
+            break
+        total += len(data)
+        out.append((index, data))
+    return out
+
+
+def extract_media(raw_url) -> dict:
+    """게시물 링크 → 원본 사진 전체를 data URL 로. (허브 /api/extract-media)"""
+    target = _sns_parse_url(raw_url)
+    if not target.get("ok"):
+        return {"ok": False, "invalid": True, "error": target.get("error"), "images": []}
+
+    platform = target["platform"]
+    code = target.get("code") or ""
+    try:
+        final_url, html = _media_html(target["url"])
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": "게시물 페이지를 열지 못했어요. (%s)" % exc, "images": []}
+
+    if not code:
+        found = re.search(r"/(?:post|p|reel|t)/([A-Za-z0-9_-]{5,})", final_url or "")
+        code = found.group(1) if found else ""
+
+    blocks = _json_blocks(html)
+    media = _pick_media_object(blocks, code)
+    items = _media_items(media) if media else []
+    if not items and not media:
+        # 페이지 JSON 을 못 읽었을 때만 og:image 로 한 장이라도 (프로필 사진은 제외)
+        profile_pics = _profile_pic_urls(blocks)
+        items = [it for it in _fallback_items(html)
+                 if it["url"] not in profile_pics and not _is_profile_pic(it["url"])]
+
+    photos = [it for it in items if not it.get("video")]
+    skipped_video = len(items) - len(photos)
+    if not photos:                       # 사진이 없으면 영상 썸네일이라도
+        photos = items
+        skipped_video = 0
+
+    if not photos:
+        reason = ("이 게시물에는 사진이 없어요. (글만 있거나 영상만 있는 게시물)")
+        if not media:
+            reason = "이 링크에서 사진을 찾지 못했어요. 다른 게시물 링크로 시도해 보세요."
+        return {"ok": False, "error": reason, "platform": platform, "code": code, "images": []}
+
+    label = "인스타" if platform == "instagram" else "쓰레드"
+    referer = target["url"]
+    downloaded = _download_images(photos, referer)
+    images = []
+    for index, data in downloaded:
+        item = photos[index]
+        images.append({
+            "dataUrl": "data:%s;base64,%s" % (_sniff_mime(data), base64.b64encode(data).decode("ascii")),
+            "name": "%s %d" % (label, index + 1),
+            "width": item.get("width") or 0,
+            "height": item.get("height") or 0,
+        })
+    if not images:
+        return {"ok": False, "error": "사진 주소는 찾았지만 내려받지 못했어요. 잠시 뒤 다시 시도해 주세요.",
+                "platform": platform, "code": code, "images": []}
+
+    result = {
+        "ok": True,
+        "platform": platform,
+        "code": code,
+        "count": len(images),
+        "images": images,
+    }
+    if len(photos) > len(images):
+        result["note"] = "사진 %d장 중 %d장만 옮겼어요." % (len(photos), len(images))
+    elif skipped_video:
+        result["note"] = "영상 %d개는 빼고 사진만 옮겼어요." % skipped_video
+    log("링크 사진 불러오기: %s %s → %d장" % (platform, code, len(images)))
+    return result
+
+
 # ───────────────────────────── 앱 창으로 열기 ─────────────────────────────
 
 def _browser_exe() -> list[Path]:
@@ -757,6 +1145,9 @@ class HubHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802
         path = self.path.split("?")[0]
+        if path == "/api/health":
+            # 사진 편집기(photo-editor)가 스튜디오 연결을 확인할 때 씁니다.
+            return self.json_out({"ok": True, "app": "studio-launcher", "version": SERVER_VERSION})
         if path in ("/api/status", "/health"):
             return self.json_out(snapshot())
         if path == "/api/version":
@@ -794,6 +1185,13 @@ class HubHandler(SimpleHTTPRequestHandler):
             })
             threading.Thread(target=finish_shutdown, name="shutdown", daemon=True).start()
             return
+
+        if path == "/api/extract-media":
+            # 인스타그램·쓰레드 게시물 링크 → 원본 사진 전체(data URL). photo-editor 연동
+            result = extract_media(payload.get("url"))
+            if result.get("invalid"):
+                return self.json_out(result, 400)
+            return self.json_out(result)
 
         if path == "/api/update/check":
             remote = fetch_remote_version()
